@@ -24,6 +24,8 @@ mapping:
                    0, 0, 1]
 
 publish:
+    map_frame_name: "map"
+    body_frame_name: "base_link"
     path_en:  false
     scan_publish_en:  true       # false: close all the point cloud output
     dense_publish_en: true       # false: low down the points number in a global-frame point clouds scan.
