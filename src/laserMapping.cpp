@@ -56,6 +56,7 @@
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
 #include <geometry_msgs/Vector3.h>
+#include <geometry_msgs/TwistStamped.h>
 #include <livox_ros_driver/CustomMsg.h>
 #include "preprocess.h"
 #include <ikd-Tree/ikd_Tree.h>
@@ -582,12 +583,24 @@ void set_posestamp(T & out)
     
 }
 
-void publish_odometry(const ros::Publisher & pubOdomAftMapped)
+template<typename T>
+void set_twiststamp(T & out)
+{
+    out.twist.linear.x = state_point.vel(0);
+    out.twist.linear.y = state_point.vel(1);
+    out.twist.linear.z = state_point.vel(2);
+    out.twist.angular.x = Measures.imu.back()->angular_velocity.x;
+    out.twist.angular.y = Measures.imu.back()->angular_velocity.y;
+    out.twist.angular.z = Measures.imu.back()->angular_velocity.z;
+}
+
+void publish_odometry(const ros::Publisher & pubOdomAftMapped, const ros::Publisher & pubTwist)
 {
     odomAftMapped.header.frame_id = map_frame_name;
     odomAftMapped.child_frame_id = body_frame_name;
     odomAftMapped.header.stamp = ros::Time().fromSec(lidar_end_time);// ros::Time().fromSec(lidar_end_time);
     set_posestamp(odomAftMapped.pose);
+    set_twiststamp(odomAftMapped.twist);
     pubOdomAftMapped.publish(odomAftMapped);
     auto P = kf.get_P();
     for (int i = 0; i < 6; i ++)
@@ -613,6 +626,23 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped)
     q.setZ(odomAftMapped.pose.pose.orientation.z);
     transform.setRotation( q );
     br.sendTransform( tf::StampedTransform( transform, odomAftMapped.header.stamp, map_frame_name, body_frame_name ) );
+
+    // Publish Twist on base_link frame
+    geometry_msgs::TwistStamped twist;
+    twist.header.stamp = odomAftMapped.header.stamp;
+    twist.header.frame_id = body_frame_name;
+    twist.twist.linear.x = sqrt(odomAftMapped.twist.twist.linear.x * odomAftMapped.twist.twist.linear.x + odomAftMapped.twist.twist.linear.y * odomAftMapped.twist.twist.linear.y);
+
+    // TODO: Transform twist to base_link
+    // tf::Vector3 mapLinearVel(odomAftMapped.twist.twist.linear.x, odomAftMapped.twist.twist.linear.y, odomAftMapped.twist.twist.linear.z);
+    // tf::Vector3 baseLinkLinearVel = transform.getBasis() * mapLinearVel;
+    // twist.twist.linear.x = sqrt(baseLinkLinearVel.x() * baseLinkLinearVel.x() + baseLinkLinearVel.y() * baseLinkLinearVel.y());
+    // twist.twist.linear.y = 0.0;
+    // twist.twist.linear.x = baseLinkLinearVel.x();
+    // twist.twist.linear.y = baseLinkLinearVel.y();
+    // twist.twist.linear.z = baseLinkLinearVel.z();
+
+    pubTwist.publish(twist);
 }
 
 void publish_path(const ros::Publisher pubPath)
@@ -854,6 +884,8 @@ int main(int argc, char** argv)
             ("/Odometry", 100000);
     ros::Publisher pubPath          = nh.advertise<nav_msgs::Path> 
             ("/path", 100000);
+    // publish twist
+    ros::Publisher pubTwist = nh.advertise<geometry_msgs::TwistStamped>("/twist", 100000);
 //------------------------------------------------------------------------------------------------------
     signal(SIGINT, SigHandle);
     ros::Rate rate(5000);
@@ -965,7 +997,7 @@ int main(int argc, char** argv)
             double t_update_end = omp_get_wtime();
 
             /******* Publish odometry *******/
-            publish_odometry(pubOdomAftMapped);
+            publish_odometry(pubOdomAftMapped, pubTwist);
 
             /*** add the feature points to map kdtree ***/
             t3 = omp_get_wtime();
