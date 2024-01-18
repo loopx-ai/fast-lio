@@ -642,6 +642,13 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped, const ros::Publis
     // twist.twist.linear.y = baseLinkLinearVel.y();
     // twist.twist.linear.z = baseLinkLinearVel.z();
 
+    // Temporary use: exit the program when the speed exceeds the threshold
+    if (twist.twist.linear.x > 20.0 || twist.twist.linear.y > 20.0)
+    {
+        ROS_ERROR("Speed exceeds the threshold, exit the program!");
+        exit(0);
+    }
+
     pubTwist.publish(twist);
 }
 
