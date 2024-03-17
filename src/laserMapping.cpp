@@ -633,17 +633,40 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped, const ros::Publis
     twist.header.frame_id = body_frame_name;
     twist.twist.linear.x = sqrt(odomAftMapped.twist.twist.linear.x * odomAftMapped.twist.twist.linear.x + odomAftMapped.twist.twist.linear.y * odomAftMapped.twist.twist.linear.y);
 
-    // TODO: Transform twist to base_link
-    // tf::Vector3 mapLinearVel(odomAftMapped.twist.twist.linear.x, odomAftMapped.twist.twist.linear.y, odomAftMapped.twist.twist.linear.z);
-    // tf::Vector3 baseLinkLinearVel = transform.getBasis() * mapLinearVel;
-    // twist.twist.linear.x = sqrt(baseLinkLinearVel.x() * baseLinkLinearVel.x() + baseLinkLinearVel.y() * baseLinkLinearVel.y());
-    // twist.twist.linear.y = 0.0;
-    // twist.twist.linear.x = baseLinkLinearVel.x();
-    // twist.twist.linear.y = baseLinkLinearVel.y();
-    // twist.twist.linear.z = baseLinkLinearVel.z();
+    tf::Matrix3x3 rotation(transform.getRotation());
+    double roll, pitch, yaw;
+    rotation.getRPY(roll, pitch, yaw);
+
+    // Note: When the velocity(map frame) vector angle is within ±90° of the body angle: moving forward.
+    double vel_vector_angle = atan2(odomAftMapped.twist.twist.linear.y, odomAftMapped.twist.twist.linear.x);
+    double diff = abs(vel_vector_angle - yaw); // yaw: -PI ~ PI, vel_vector_angle: -PI ~ PI
+
+    static int body_direction = 1; // 1: forward, -1: backward
+    if (diff > M_PI/2 && diff < 3*M_PI/2 && abs(twist.twist.linear.x) > 0.05) // At lower speeds, the estimate may not be accurate, use last direction
+    {
+        body_direction = -1;
+    }
+    else
+    {
+        body_direction = 1;
+    }
+    twist.twist.linear.x *= body_direction;
+    
+    // std::cout << " yaw: " << yaw << " vel_vector_angle: " << vel_vector_angle << " diff: " << diff << " twist: " << twist.twist.linear.x << std::endl;
+    
+    // tf::Vector3 twist_rot(odomAftMapped.twist.twist.angular.x,
+    //                       odomAftMapped.twist.twist.angular.y,
+    //                       odomAftMapped.twist.twist.angular.z);
+    // tf::Vector3 twist_vel(odomAftMapped.twist.twist.linear.x,
+    //                       odomAftMapped.twist.twist.linear.y,
+    //                       odomAftMapped.twist.twist.linear.z);
+    
+    // tf::Transform inverseTransform = transform.inverse();
+    // tf::Vector3 out_rot = inverseTransform.getBasis() * twist_rot;
+    // tf::Vector3 out_vel = inverseTransform.getBasis()* twist_vel + inverseTransform.getOrigin().cross(out_rot);
 
     // Temporary use: exit the program when the speed exceeds the threshold
-    if (twist.twist.linear.x > 20.0 || twist.twist.linear.y > 20.0)
+    if (abs(twist.twist.linear.x) > 20.0 || abs(twist.twist.linear.y) > 20.0)
     {
         ROS_ERROR("Speed exceeds the threshold, exit the program!");
         exit(0);
