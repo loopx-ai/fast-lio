@@ -539,7 +539,7 @@ void publish_frame_body(const ros::Publisher & pubLaserCloudFull_body)
 
     sensor_msgs::PointCloud2 laserCloudmsg;
     pcl::toROSMsg(*laserCloudIMUBody, laserCloudmsg);
-    laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
+    laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time); // ros::Time::now();
     laserCloudmsg.header.frame_id = body_frame_name;
     pubLaserCloudFull_body.publish(laserCloudmsg);
     publish_count -= PUBFRAME_PERIOD;
@@ -598,7 +598,7 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped, const ros::Publis
 {
     odomAftMapped.header.frame_id = map_frame_name;
     odomAftMapped.child_frame_id = body_frame_name;
-    odomAftMapped.header.stamp = ros::Time().fromSec(lidar_end_time);// ros::Time().fromSec(lidar_end_time);
+    odomAftMapped.header.stamp = ros::Time().fromSec(lidar_end_time);// // ros::Time::now();
     set_posestamp(odomAftMapped.pose);
     set_twiststamp(odomAftMapped.twist);
     pubOdomAftMapped.publish(odomAftMapped);
@@ -630,7 +630,7 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped, const ros::Publis
     // Publish Twist on base_link frame
     geometry_msgs::TwistStamped twist;
     twist.header.stamp = odomAftMapped.header.stamp;
-    twist.header.frame_id = body_frame_name;
+    twist.header.frame_id = "base_link"; //body_frame_name;
     twist.twist.linear.x = sqrt(odomAftMapped.twist.twist.linear.x * odomAftMapped.twist.twist.linear.x + odomAftMapped.twist.twist.linear.y * odomAftMapped.twist.twist.linear.y);
 
     tf::Matrix3x3 rotation(transform.getRotation());
@@ -651,6 +651,8 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped, const ros::Publis
         body_direction = 1;
     }
     twist.twist.linear.x *= body_direction;
+
+    twist.twist.angular.z = -odomAftMapped.twist.twist.angular.z;
     
     // std::cout << " yaw: " << yaw << " vel_vector_angle: " << vel_vector_angle << " diff: " << diff << " twist: " << twist.twist.linear.x << std::endl;
     
