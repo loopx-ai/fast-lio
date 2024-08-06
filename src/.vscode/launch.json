@@ -1,0 +1,11 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ROS: Launch",
+            "type": "ros",
+            "request": "launch",
+            "target": "/home/loopx/shared_dir/clair-alert_ws/src/fast-lio/launch/mapping_mid360_livox.launch" // <<< Configure path to your launch file
+        }
+    ]
+}

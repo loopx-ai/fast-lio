@@ -16,7 +16,7 @@ mapping:
     b_acc_cov: 0.0001
     b_gyr_cov: 0.0001
     fov_degree:    90
-    det_range:     100.0
+    det_range:     500.0
     extrinsic_est_en:  false      # true: enable the online estimation of IMU-LiDAR extrinsic
     extrinsic_T: [ -0.011, -0.02329, 0.04412 ]
     extrinsic_R: [ 1, 0, 0,
@@ -26,12 +26,12 @@ mapping:
 publish:
     map_frame_name: "map"
     body_frame_name: "base_link"
-    path_en:  false
-    scan_publish_en:  false       # false: close all the point cloud output
-    dense_publish_en: false       # false: low down the points number in a global-frame point clouds scan.
-    scan_bodyframe_pub_en: false  # true: output the point cloud scans in IMU-body-frame
+    path_en:  true
+    scan_publish_en:  true       # false: close all the point cloud output
+    dense_publish_en: true       # false: low down the points number in a global-frame point clouds scan.
+    scan_bodyframe_pub_en: true  # true: output the point cloud scans in IMU-body-frame
 
 pcd_save:
-    pcd_save_en: false
+    pcd_save_en: true
     interval: -1                 # how many LiDAR frames saved in each pcd file; 
                                  # -1 : all frames will be saved in ONE pcd file, may lead to memory crash when having too much frames.
