@@ -1,0 +1,12 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ROS: Launch",
+            "type": "ros",
+            "request": "launch",
+            "target": "${workspaceFolder}/launch/mapping_mid360_livox.launch" // <<< Configure path to your launch file
+            
+        }
+    ]
+}

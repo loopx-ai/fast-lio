@@ -100,6 +100,7 @@ class Preprocess
                      PointCloudXYZI::Ptr &pcl_surf_out,
                      PointCloudXYZI::Ptr &pcl_corn_out);
   void set(bool feat_en, int lid_type, double bld, int pfilt_num);
+  void set_if_debug_print(bool if_in);
 
   // sensor_msgs::PointCloud2::ConstPtr pointcloud;
   PointCloudXYZI pl_full, pl_corn, pl_surf;
@@ -130,4 +131,5 @@ class Preprocess
   double edgea, edgeb;
   double smallp_intersect, smallp_ratio;
   double vx, vy, vz;
+  bool if_debug_print;
 };

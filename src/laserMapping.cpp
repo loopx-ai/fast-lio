@@ -53,6 +53,7 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/io/pcd_io.h>
+#include <pcl_ros/transforms.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
@@ -60,6 +61,7 @@
 #include <geometry_msgs/TwistStamped.h>
 #include <livox_ros_driver/CustomMsg.h>
 #include "preprocess.h"
+#include <name_pcd.h>
 #include <ikd-Tree/ikd_Tree.h>
 #include <common_lib.h>
 
@@ -99,6 +101,10 @@ bool lidar_pushed, flg_first_scan = true, flg_exit = false, flg_EKF_inited;
 bool scan_pub_en = true, dense_pub_en = false, scan_body_pub_en = false;
 string map_frame_name, body_frame_name;
 double max_x, min_x, max_y, min_y, max_z, min_z;
+std::vector<float> front_lidar_2_base, rear_lidar_2_base;
+
+tf::Transform tf_front_lidar_2_base;
+tf::Transform tf_rear_lidar_2_base;
 
 vector<vector<int>> pointSearchInd_surf;
 vector<BoxPointType> cub_needrm;
@@ -147,22 +153,46 @@ nav_msgs::Odometry odomAftMapped;
 geometry_msgs::Quaternion geoQuat;
 geometry_msgs::PoseStamped msg_body_pose;
 
+FILE_PATH savePcdPath;
+std::string prefixName;
+std::string postfixName;
+std::string folderString_default;
+
+bool if_debug_print = false;
+bool if_init_time_sec = false;
+bool if_moving = false;
+bool if_start_idel_1 = false;
+bool if_start_idel_2 = false;
+double time_init_sec;
+double time_curr_sec;
+double time_last_logtag_sec;
+double time_last_idletag_sec;
+double time_idle_start_sec;
+double time_period_idel_sec;
+double log_frequency_hz = 3.0;
+
 shared_ptr<Preprocess> p_pre(new Preprocess());
 shared_ptr<ImuProcess> p_imu(new ImuProcess());
 
 std::vector<int> CropboxPolygonIndicesHandle(const livox_ros_driver::CustomMsg::ConstPtr &msg)
 {
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_orig_ptr (new pcl::PointCloud<pcl::PointXYZ> ());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_orig_ptr(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_tran_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     cloud_orig_ptr->points.resize(int(msg->point_num));
 
-    for(int i = 0; i<msg->point_num; i++){
+    for (int i = 0; i < msg->point_num; i++)
+    {
         cloud_orig_ptr->points[i].x = msg->points[i].x;
         cloud_orig_ptr->points[i].y = msg->points[i].y;
         cloud_orig_ptr->points[i].z = msg->points[i].z;
     }
+    /* frame_id lidar to base_link */
 
+    pcl_ros::transformPointCloud(*cloud_orig_ptr, *cloud_tran_ptr, tf_front_lidar_2_base);
+
+    /*crop self / crop a cuboid out */
     pcl::CropBox<pcl::PointXYZ> cropBoxFilter(true);
-    cropBoxFilter.setInputCloud(cloud_orig_ptr);
+    cropBoxFilter.setInputCloud(cloud_tran_ptr);
     cropBoxFilter.setNegative(true);
     Eigen::Vector4f min_pt(min_x, min_y, min_z, 1.0f);
     Eigen::Vector4f max_pt(max_x, max_y, max_z, 1.0f);
@@ -174,8 +204,8 @@ std::vector<int> CropboxPolygonIndicesHandle(const livox_ros_driver::CustomMsg::
     // Indices
     vector<int> indices;
     cropBoxFilter.filter(indices);
-    //cropBoxFilter.getRemovedIndices(indices);
-    return(indices);
+    // cropBoxFilter.getRemovedIndices(indices);
+    return (indices);
 }
 
 void SigHandle(int sig)
@@ -325,7 +355,14 @@ void lasermap_fov_segment()
 
 void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
 {
-    std::cout << "standard_pcl_cbk" << std::endl;
+    //std::cout << "standard_pcl_cbk" << std::endl;
+    if (!if_init_time_sec){
+        time_init_sec = msg->header.stamp.toSec();
+        if_init_time_sec = true;
+        time_last_logtag_sec = time_init_sec;
+        time_idle_start_sec = time_init_sec;
+    }
+    time_curr_sec = msg->header.stamp.toSec();
     mtx_buffer.lock();
     scan_count++;
     double preprocess_start_time = omp_get_wtime();
@@ -335,7 +372,7 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
         lidar_buffer.clear();
     }
     PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
-    p_pre->process(msg,  pcl_feature_full, pcl_feature_surf, pcl_feature_corn);
+    p_pre->process(msg, pcl_feature_full, pcl_feature_surf, pcl_feature_corn);
     lidar_buffer.push_back(ptr);
     time_buffer.push_back(msg->header.stamp.toSec());
     last_timestamp_lidar = msg->header.stamp.toSec();
@@ -346,8 +383,14 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
 double timediff_lidar_wrt_imu = 0.0;
 bool timediff_set_flg = false;
-void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg)
-{
+void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg){
+    if (!if_init_time_sec){
+        time_init_sec = msg->header.stamp.toSec();
+        if_init_time_sec = true;
+        time_last_logtag_sec = time_init_sec;
+        time_idle_start_sec = time_init_sec;
+    }
+    time_curr_sec = msg->header.stamp.toSec();
     mtx_buffer.lock();
     double preprocess_start_time = omp_get_wtime();
     scan_count++;
@@ -375,7 +418,7 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg)
     sensor_msgs::PointCloud2 ros_pc_msg_feature_corn;
 
     std::vector<int> index_cropself = CropboxPolygonIndicesHandle(msg);
-    p_pre->process(msg,index_cropself, pcl_feature_full, pcl_feature_surf, pcl_feature_corn);
+    p_pre->process(msg, index_cropself, pcl_feature_full, pcl_feature_surf, pcl_feature_corn);
     pcl::toROSMsg(*pcl_feature_full, ros_pc_msg_feature_full);
     pcl::toROSMsg(*pcl_feature_surf, ros_pc_msg_feature_surf);
     pcl::toROSMsg(*pcl_feature_corn, ros_pc_msg_feature_corn);
@@ -542,6 +585,42 @@ void publish_feature(const ros::Publisher &pub, PointCloudXYZI::Ptr pcl_in)
 
 PointCloudXYZI::Ptr pcl_wait_pub(new PointCloudXYZI(500000, 1));
 PointCloudXYZI::Ptr pcl_wait_save(new PointCloudXYZI());
+
+void defaultPathName()
+{
+    savePcdPath.filepath = "~/bags/pcd";
+    savePcdPath.filepath = folderString_default;
+    savePcdPath.extension = "pcd";
+}
+
+void updateTimeName()
+{
+    time_t rawtime;
+    rawtime = time(NULL);
+    struct tm *timeinfo;
+    char buffer[127];
+    timeinfo = localtime(&rawtime);
+
+    strftime(buffer, 127, "%G%m%d_%H%M%SScan", timeinfo);
+    savePcdPath.filename = std::string(buffer);
+    if(if_debug_print){
+        ROS_INFO_STREAM("[Mapping][pcd name] timeString = " << buffer);
+    }
+}
+
+void updateTimeName(ros::Time ros_time_in)
+{
+    //time_t ros_time = ros::Time().fromSec(ros_time_in);
+    time_t ros_time = ros_time_in.toSec();
+    struct tm *timeinfo;
+    char buffer[127];
+    timeinfo = localtime(&ros_time);
+    strftime(buffer, 127, "%G%m%d_%H%M%SScan", timeinfo);
+    savePcdPath.filename = std::string(buffer);
+    if(if_debug_print){
+        ROS_INFO_STREAM("[Mapping][pcd name] timeString = " << buffer);
+    }
+}
 void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
 {
     if (scan_pub_en)
@@ -571,9 +650,9 @@ void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
     /* 2. noted that pcd save will influence the real-time performences **/
     if (pcd_save_en)
     {
+        defaultPathName();
         int size = feats_undistort->points.size();
-        PointCloudXYZI::Ptr laserCloudWorld(
-            new PointCloudXYZI(size, 1));
+        PointCloudXYZI::Ptr laserCloudWorld(new PointCloudXYZI(size, 1));
 
         for (int i = 0; i < size; i++)
         {
@@ -586,11 +665,15 @@ void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
         scan_wait_num++;
         if (pcl_wait_save->size() > 0 && pcd_save_interval > 0 && scan_wait_num >= pcd_save_interval)
         {
+            updateTimeName(ros::Time().fromSec(lidar_end_time));
             pcd_index++;
-            string all_points_dir(string(string(ROOT_DIR) + "PCD/scans_") + to_string(pcd_index) + string(".pcd"));
+            // string all_points_dir(string(string(ROOT_DIR) + "PCD/scans_") + to_string(pcd_index) + string(".pcd"));
             pcl::PCDWriter pcd_writer;
-            cout << "current scan saved to /PCD/" << all_points_dir << endl;
-            pcd_writer.writeBinary(all_points_dir, *pcl_wait_save);
+            if (if_debug_print){
+                ROS_INFO_STREAM( "[Mapping][pcd path]current scan saved to " << fullFileName(savePcdPath) );
+            }
+            pcl::io::savePCDFileASCII(fullFileName(savePcdPath), *pcl_wait_save);
+            // pcd_writer.writeBinary(all_points_dir, *pcl_wait_save);
             pcl_wait_save->clear();
             scan_wait_num = 0;
         }
@@ -712,19 +795,59 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped, const ros::Publish
     double diff = abs(vel_vector_angle - yaw); // yaw: -PI ~ PI, vel_vector_angle: -PI ~ PI
 
     static int body_direction = 1;                                                  // 1: forward, -1: backward
-    if (diff > M_PI / 2 && diff < 3 * M_PI / 2 && abs(twist.twist.linear.x) > 0.05) // At lower speeds, the estimate may not be accurate, use last direction
-    {
+    if (diff > M_PI / 2 && diff < 3 * M_PI / 2 && abs(twist.twist.linear.x) > 0.05){ // At lower speeds, the estimate may not be accurate, use last direction
         body_direction = -1;
-    }
-    else
-    {
+    }else{
         body_direction = 1;
     }
     twist.twist.linear.x *= body_direction;
-
     twist.twist.angular.z = -odomAftMapped.twist.twist.angular.z;
 
-    std::cout << " yaw(degree): " << yaw * 180.0 / M_PI << " vel_vector_angle: " << vel_vector_angle << " diff: " << diff << " twist: " << twist.twist.linear.x << std::endl;
+    if (if_debug_print){
+        ROS_INFO_STREAM("[Mapping][Twist]yaw(degree):" << yaw * 180.0 / M_PI << " vel_vector_angle: " << vel_vector_angle << " diff: " << diff << " twist: " << twist.twist.linear.x);
+    }
+    float speed_meter_s = sqrt(twist.twist.linear.x * twist.twist.linear.x +
+                               twist.twist.linear.y * twist.twist.linear.y +
+                               twist.twist.linear.z * twist.twist.linear.z);
+
+    //std::cout<< time_curr_sec <<"," << time_last_logtag_sec <<"," << log_frequency_hz <<std::endl;
+    //std::cout <<"diff * freq =" <<(time_curr_sec - time_last_logtag_sec) * log_frequency_hz <<std::endl;
+    if ((time_curr_sec - time_last_logtag_sec) * log_frequency_hz > 1.0){
+        ROS_INFO_STREAM("[Mapping][Speed]" <<std::setw(5)<<std::fixed<<std::setprecision(2)<<speed_meter_s << "m/s, "
+                                           <<std::setw(5)<<std::fixed<<std::setprecision(2)<<speed_meter_s * 3.6 << "km/h");
+        time_last_logtag_sec = time_curr_sec;
+    }
+
+    if(speed_meter_s < 0.8){
+        if (if_moving == 1){
+            if_moving = false;
+            time_idle_start_sec = time_curr_sec;
+        }else{
+            time_period_idel_sec = time_curr_sec - time_idle_start_sec;
+        }
+    }else if (if_moving == false){
+      if_moving = true;
+      if(time_period_idel_sec > 30){
+         ROS_INFO_STREAM("[Mapping][idel_end]"<< "idel time is over, idel time = "<< time_period_idel_sec <<"sec" );
+        if_start_idel_1 = false;
+        if_start_idel_2 = false;
+      }
+      time_period_idel_sec = 0; 
+    }
+
+    if(int (time_period_idel_sec) == 10 && !if_start_idel_1){
+      ROS_INFO_STREAM("[Mapping][idel_start]"<< "idel time = "<< time_period_idel_sec <<"sec" );
+      if_start_idel_1 = true;
+    }
+    if(int (time_period_idel_sec) == 30 && !if_start_idel_2){
+      ROS_INFO_STREAM("[Mapping][idel_30s]"<< "idel time = "<< time_period_idel_sec <<"sec" );
+      if_start_idel_2 = true;
+    }
+    if(int (time_period_idel_sec > 60 && int(time_period_idel_sec)%60==0 && if_start_idel_2)){
+      ROS_INFO_STREAM("[Mapping][idel_mins]"<< "idel time = "<< time_period_idel_sec <<"sec" );
+      if_start_idel_2 = false;
+    }
+    if( int(time_period_idel_sec)%60==1 && !if_start_idel_2) if_start_idel_2 = true;
 
     // tf::Vector3 twist_rot(odomAftMapped.twist.twist.angular.x,
     //                       odomAftMapped.twist.twist.angular.y,
@@ -950,6 +1073,7 @@ int main(int argc, char **argv)
     nh.param<int>("pcd_save/interval", pcd_save_interval, -1);
     nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
     nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
+    nh.param<std::string>("folderString", folderString_default, "/home/loopx/rosbag/pcd");
 
     nh.getParam("max_x", max_x);
     nh.getParam("min_x", min_x);
@@ -958,15 +1082,30 @@ int main(int argc, char **argv)
     nh.getParam("max_z", max_z);
     nh.getParam("min_z", min_z);
 
-    ROS_INFO_STREAM("[Mapping] Crop self box polygon : max_x = "<< max_x <<
-                                          ", min_x = "<< min_x <<
-                                          ", max_y = "<< max_y <<
-                                          ", min_y = "<< min_y << 
-                                          ", max_z = "<< max_z <<
-                                          ", min_z = "<< min_z <<".");
+    front_lidar_2_base.resize(6);
+    rear_lidar_2_base.resize(6);
 
+    nh.getParam("front_lidar_base2lidar", front_lidar_2_base);
+    nh.getParam("rear_lidar_base2lidar", rear_lidar_2_base);
+
+    nh.param<bool>("if_debug_print", if_debug_print, false);
+    p_pre->set_if_debug_print(if_debug_print);
+
+    nh.param<double>("log_frequency_hz", log_frequency_hz, 3);
+
+    tf_front_lidar_2_base.setRotation(tf::createQuaternionFromRPY(front_lidar_2_base[3], front_lidar_2_base[4], front_lidar_2_base[5]));
+    tf_front_lidar_2_base.setOrigin(tf::Vector3(front_lidar_2_base[0], front_lidar_2_base[1], front_lidar_2_base[2]));
+
+    if (if_debug_print)
+    {
+        ROS_INFO_STREAM("[Mapping] Crop self box polygon : max_x = " << max_x << ", min_x = " << min_x << ", max_y = " << max_y << ", min_y = " << min_y << ", max_z = " << max_z << ", min_z = " << min_z);
+        ROS_INFO_STREAM("[Mapping] tf_front_lidar_2_base : x = " << front_lidar_2_base[0] << ", y = " << front_lidar_2_base[1] << ", z = " << front_lidar_2_base[2] << ", roll = " << front_lidar_2_base[3] << ", pitch = " << front_lidar_2_base[4] << ", yaw = " << front_lidar_2_base[5] << ".");
+    }
+
+    /*
     cout << "p_pre->lidar_type " << p_pre->lidar_type << endl;
     cout << "lid_topic = " << lid_topic << endl;
+    */
 
     path.header.stamp = ros::Time::now();
     path.header.frame_id = map_frame_name;
@@ -1037,8 +1176,10 @@ int main(int argc, char **argv)
     signal(SIGINT, SigHandle);
     ros::Rate rate(5000);
     bool status = ros::ok();
+    static int count_while = 0;
     while (status)
     {
+        count_while++;
         if (flg_exit)
             break;
         ros::spinOnce();
@@ -1193,10 +1334,12 @@ int main(int argc, char **argv)
                 s_plot9[time_log_counter] = aver_time_consu;
                 s_plot10[time_log_counter] = add_point_size;
                 time_log_counter++;
-                printf("[ mapping ]: time: IMU + Map + Input Downsample: %0.6f ave match: %0.6f ave solve: %0.6f  ave ICP: %0.6f  map incre: %0.6f ave total: %0.6f icp: %0.6f construct H: %0.6f \n", t1 - t0, aver_time_match, aver_time_solve, t3 - t1, t5 - t3, aver_time_consu, aver_time_icp, aver_time_const_H_time);
+                /*
+                printf("[mapping]time: IMU + Map + Input Downsample: %0.6f ave match: %0.6f ave solve: %0.6f  ave ICP: %0.6f  map incre: %0.6f ave total: %0.6f icp: %0.6f construct H: %0.6f \n", t1 - t0, aver_time_match, aver_time_solve, t3 - t1, t5 - t3, aver_time_consu, aver_time_icp, aver_time_const_H_time);
                 ext_euler = SO3ToEuler(state_point.offset_R_L_I);
                 fout_out << setw(20) << Measures.lidar_beg_time - first_lidar_time << " " << euler_cur.transpose() << " " << state_point.pos.transpose() << " " << ext_euler.transpose() << " " << state_point.offset_T_L_I.transpose() << " " << state_point.vel.transpose()
                          << " " << state_point.bg.transpose() << " " << state_point.ba.transpose() << " " << state_point.grav << " " << feats_undistort->points.size() << endl;
+                */
                 dump_lio_state_to_log(fp);
             }
         }
@@ -1213,7 +1356,10 @@ int main(int argc, char **argv)
         string file_name = string("scans.pcd");
         string all_points_dir(string(string(ROOT_DIR) + "PCD/") + file_name);
         pcl::PCDWriter pcd_writer;
-        cout << "current scan saved to /PCD/" << file_name << endl;
+        if(if_debug_print){
+           ROS_INFO_STREAM("current scan saved to /PCD/" << file_name);
+        }
+        //cout << "current scan saved to /PCD/" << file_name << endl;
         pcd_writer.writeBinary(all_points_dir, *pcl_wait_save);
     }
 

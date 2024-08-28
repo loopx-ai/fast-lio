@@ -29,9 +29,14 @@ Preprocess::Preprocess()
   jump_down_limit = cos(jump_down_limit / 180 * M_PI);
   cos160 = cos(cos160 / 180 * M_PI);
   smallp_intersect = cos(smallp_intersect / 180 * M_PI);
+  if_debug_print = true;
 }
 
 Preprocess::~Preprocess() {}
+
+void Preprocess::set_if_debug_print(bool if_in){
+  if_debug_print = if_in;
+}
 
 void Preprocess::set(bool feat_en, int lid_type, double bld, int pfilt_num)
 {
@@ -114,7 +119,9 @@ void Preprocess::avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg,
   int msg_in_size = msg->point_num;
   int crop_size = indices.size();
   // int plsize = msg->point_num;
-  std::cout << "crop_size/pointsin: " << crop_size << "/" << msg_in_size << endl;
+  if(if_debug_print){
+  ROS_INFO_STREAM("[Mapping][preprocess]crop_size/points_in: " << crop_size << "/" << msg_in_size);
+  }
 
   pl_corn.reserve(crop_size);
   pl_surf.reserve(crop_size);
@@ -179,11 +186,14 @@ void Preprocess::avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg,
       // pl_surf += pl;
     }
     time += omp_get_wtime() - t0;
-    printf("Feature extraction time: %lf \n", time / count);
+
+    //printf("Feature extraction time: %lf \n", time / count);
     // pub_func(pl_surf, pub_surf, msg->header.stamp);
     // pub_func(pl_corn, pub_corn, msg->header.stamp);
-    // std::cout<<"pl_surf.size(): "<<pl_surf.points.size() <<endl;
-    // std::cout<<"pl_corn.size(): "<<pl_corn.points.size() <<endl;
+    if(if_debug_print){
+       ROS_INFO_STREAM("[Mapping][preprocess] pl_surf.size(): "<<pl_surf.points.size()<<", pl_corn.size(): "<<pl_corn.points.size());
+       ROS_INFO("[Mapping][preprocess]Feature extraction time: %lf \n", time / count);
+    }
   }
   else
   {
