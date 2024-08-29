@@ -19,8 +19,10 @@
   <param name="cube_side_length" type="double" value="1000" />
   <param name="runtime_pos_log_enable" type="bool" value="1" />
   <param name="preprocess/lidar_type" type="int" value="1" />'
-  <param name="if_debug_print" type="bool" value="0" />'
-  <param name="log_frequency_hz" type="double" value="3.0" />'
+  <param name="if_log_debug_print" type="bool" value="0" />'
+  <param name="if_log_speed_print" type="bool" value="1" />'
+  <param name="if_log_idel_print" type="bool" value="1" />'
+  <param name="frequency_hz_log_speed" type="double" value="0.333" />'
 
   <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" respawn="true">
     <!--<remap from="$(arg livox_lidar_topic)" to="$(arg livox_lidar_topic)"/>-->
