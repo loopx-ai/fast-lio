@@ -3,10 +3,10 @@
 <!-- Launch file for Livox AVIA LiDAR -->
 
 	<arg name="rviz" default="true" />
-	<arg name="config_file" default="$(find fast_lio)/config/mid360.yaml" />
-
-	<rosparam command="load" file="$(arg config_file)" />
-	<rosparam file="$(find clair_alert)/config/config.yaml" command="load"/>
+  <!--<arg name="config_file" default="$(find fast_lio)/config/mid360.yaml" />-->
+  <arg name="config_file" value="$(find clair_alert)/config/fast_lio.yaml" />
+  <rosparam command="load" file="$(arg config_file)" />
+  <rosparam file="$(find clair_alert)/config/config.yaml" command="load"/>
 
 	<param name="feature_extract_enable" type="bool" value="1" />
 	<param name="pcd_save_en" type="bool" value="0" />

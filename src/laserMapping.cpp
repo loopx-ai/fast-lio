@@ -163,6 +163,7 @@ std::string folderString_default;
 bool if_log_debug_print = false;
 bool if_log_idel_print = true;
 bool if_log_speed_print = true;
+bool if_cropself = true;
 bool if_init_time_sec = false;
 bool if_moving = false;
 bool if_start_idel_1 = false;
@@ -1079,6 +1080,12 @@ void set_self_cuboid(){
     pcl_cuboid_8pts->points[7].z=max_z;
 }
 
+void set_nocrop(){
+   max_x =  0.01; max_y =  0.01; max_z =  0.01;
+   min_x = -0.01; min_y = -0.01; min_z = -0.01;
+
+}
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "laserMapping");
@@ -1121,17 +1128,6 @@ int main(int argc, char **argv)
     nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
     nh.param<std::string>("folderString", folderString_default, "/home/loopx/rosbag/pcd");
 
-    nh.getParam("max_x", max_x);
-    nh.getParam("min_x", min_x);
-    nh.getParam("max_y", max_y);
-    nh.getParam("min_y", min_y);
-    nh.getParam("max_z", max_z);
-    nh.getParam("min_z", min_z);
-    set_self_cuboid();
-
-    front_lidar_2_base.resize(6);
-    rear_lidar_2_base.resize(6);
-
     nh.getParam("front_lidar_base2lidar", front_lidar_2_base);
     nh.getParam("rear_lidar_base2lidar", rear_lidar_2_base);
 
@@ -1141,6 +1137,21 @@ int main(int argc, char **argv)
     nh.param<bool>("if_log_speed_print", if_log_speed_print, true);
     nh.param<bool>("if_log_idel_print", if_log_idel_print, true);
     nh.param<double>("frequency_hz_log_speed", frequency_hz_log_speed, 3);
+    nh.param<bool>("if_cropself", if_cropself, true);
+
+    nh.getParam("max_x", max_x);
+    nh.getParam("min_x", min_x);
+    nh.getParam("max_y", max_y);
+    nh.getParam("min_y", min_y);
+    nh.getParam("max_z", max_z);
+    nh.getParam("min_z", min_z);
+    if(!if_cropself){
+       set_nocrop();
+    }
+    set_self_cuboid();
+
+    front_lidar_2_base.resize(6);
+    rear_lidar_2_base.resize(6);
 
     tf_front_lidar_2_base.setRotation(tf::createQuaternionFromRPY(front_lidar_2_base[3], front_lidar_2_base[4], front_lidar_2_base[5]));
     tf_front_lidar_2_base.setOrigin(tf::Vector3(front_lidar_2_base[0], front_lidar_2_base[1], front_lidar_2_base[2]));
