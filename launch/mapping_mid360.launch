@@ -6,10 +6,10 @@
   <arg name="config_file" default="$(find fast_lio)/config/mid360.yaml" />
   <!-- <arg name="config_file" value="$(find clair_alert)/config/fast_lio.yaml" /> -->
 
-  <arg name="if_log_debug_print" type="bool" default="true" />
-  <arg name="if_log_speed_print" type="bool" default="true" />
-  <arg name="if_log_idel_print" type="bool" default="true" />
-  <arg name="if_cropself" type="bool" default="true" />
+  <arg name="if_log_debug_print" default="true" />
+  <arg name="if_log_speed_print" default="true" />
+  <arg name="if_log_idel_print" default="true" />
+  <arg name="if_cropself"  default="true" />
 
   <rosparam command="load" file="$(arg config_file)" />
   <rosparam file="$(find clair_alert)/config/config.yaml" command="load"/>  
