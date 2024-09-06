@@ -8,39 +8,41 @@
   <rosparam command="load" file="$(arg config_file)" />
   <rosparam file="$(find clair_alert)/config/config.yaml" command="load"/>
 
-	<param name="feature_extract_enable" type="bool" value="1" />
-	<param name="pcd_save_en" type="bool" value="0" />
-	<param name="pcd_save/interval" type="int" value="0" />
-	<param name="point_filter_num" type="int" value="3" />
-	<param name="max_iteration" type="int" value="3" />
-	<param name="filter_size_corner_min" type="double" value="0.2" />
-	<param name="filter_size_surf" type="double" value="0.5" />
-	<param name="filter_size_map" type="double" value="0.5" />
-	<param name="cube_side_length" type="double" value="1000" />
-	<param name="runtime_pos_log_enable" type="bool" value="1" />
-	<param name="preprocess/lidar_type" type="int" value="1" />'
-	<param name="if_log_debug_print" type="bool" value="0" />'
-	<param name="if_log_speed_print" type="bool" value="1" />'
-	<param name="if_log_idel_print" type="bool" value="1" />'
-	<param name="frequency_hz_log_speed" type="double" value="0.333" />'
-  
-	<node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" respawn="true">
-	  <!--<remap from="$(arg livox_lidar_topic)" to="$(arg livox_lidar_topic)"/>-->
-	  <!--<remap from="/livox/lidar" to="/sensing/front/livox/lidar" />-->
-	  <remap from="/livox/imu" to="/sensing/front/imu/imu_data" />
-	  <remap from="/Odometry"  to="/odom" />
-	  <remap from="/twist"     to="/twist" />
-  
-	  <remap from="max_x"  to="/machine/mirror/max_x" />
-	  <remap from="min_x"  to="/machine/mirror/min_x" />
-	  <remap from="max_y"  to="/machine/mirror/max_y" />
-	  <remap from="min_y"  to="/machine/mirror/min_y" />
-	  <remap from="max_z"  to="/machine/mirror/max_z" />
-	  <remap from="min_z"  to="/machine/mirror/min_z" /> 
-  
-	  <remap from="front_lidar_base2lidar" to="/sensorkit/front/ext_base2lidar" />
-	  <remap from="rear_lidar_base2lidar"  to="/sensorkit/rear/ext_base2lidar" />
-	</node>
+  <param name="feature_extract_enable" type="bool" value="1" />
+  <param name="pcd_save/pcd_save_en" type="bool" value="1" />
+  <param name="pcd_save/interval" type="int" value="1" />
+  <param name="point_filter_num" type="int" value="3" />
+  <param name="max_iteration" type="int" value="3" />
+  <param name="filter_size_corner_min" type="double" value="0.2" />
+  <param name="filter_size_surf" type="double" value="0.5" />
+  <param name="filter_size_map" type="double" value="0.5" />
+  <param name="cube_side_length" type="double" value="1000" />
+  <param name="runtime_pos_log_enable" type="bool" value="1" />
+  <param name="preprocess/lidar_type" type="int" value="1" />'
+  <param name="if_log_debug_print" type="bool" value="1" />'
+  <param name="if_log_speed_print" type="bool" value="1" />'
+  <param name="if_log_idel_print" type="bool" value="1" />'
+  <param name="if_cropself" type="bool" value="0" />'
+  <param name="frequency_hz_log_speed" type="double" value="0.333" />'
+
+  <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" respawn="true">
+    <!--<remap from="$(arg livox_lidar_topic)" to="$(arg livox_lidar_topic)"/>-->
+    <!--<remap from="/livox/lidar" to="/sensing/front/livox/lidar" />-->
+    <remap from="/livox/imu" to="/sensing/front/imu/imu_data" />
+    <remap from="/Odometry"  to="/odom" />
+    <remap from="/twist"     to="/twist" />
+
+    <remap from="max_x"  to="/machine/mirror/max_x" />
+    <remap from="min_x"  to="/machine/mirror/min_x" />
+    <remap from="max_y"  to="/machine/mirror/max_y" />
+    <remap from="min_y"  to="/machine/mirror/min_y" />
+    <remap from="max_z"  to="/machine/mirror/max_z" />
+    <remap from="min_z"  to="/machine/mirror/min_z" /> 
+
+    <remap from="front_lidar_base2lidar" to="/sensorkit/front/ext_base2lidar" />
+    <remap from="rear_lidar_base2lidar"  to="/sensorkit/rear/ext_base2lidar" />
+  </node>
+
   
 <!--
 	<param name="feature_extract_enable" type="bool" value="0"/>
