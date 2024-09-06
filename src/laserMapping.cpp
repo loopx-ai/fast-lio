@@ -1090,6 +1090,7 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "laserMapping");
     ros::NodeHandle nh;
+    ros::NodeHandle pnh("~"); // private node handle
 
     nh.param<string>("publish/map_frame_name", map_frame_name, "map");
     nh.param<string>("publish/body_frame_name", body_frame_name, "base_link");
@@ -1122,22 +1123,28 @@ int main(int argc, char **argv)
     nh.param<bool>("feature_extract_enable", p_pre->feature_enabled, false);
     nh.param<bool>("runtime_pos_log_enable", runtime_pos_log, 0);
     nh.param<bool>("mapping/extrinsic_est_en", extrinsic_est_en, true);
-    nh.param<bool>("pcd_save/pcd_save_en", pcd_save_en, true);
+    pnh.param<bool>("pcd_save/pcd_save_en", pcd_save_en, true);
+    ROS_INFO_STREAM("[Mapping] pcd_save_en = " << pcd_save_en);
     nh.param<int>("pcd_save/interval", pcd_save_interval, -1);
     nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
     nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
-    nh.param<std::string>("folderString", folderString_default, "/home/loopx/rosbag/pcd");
+    pnh.param<std::string>("folderString", folderString_default, "/home/loopx/rosbag/pcd");
+    ROS_INFO_STREAM("[Mapping] folderString_default = " << folderString_default);
 
     nh.getParam("front_lidar_base2lidar", front_lidar_2_base);
     nh.getParam("rear_lidar_base2lidar", rear_lidar_2_base);
 
-    nh.param<bool>("if_log_debug_print", if_log_debug_print, false);
+    pnh.param<bool>("if_log_debug_print", if_log_debug_print, false);
+    ROS_INFO_STREAM("[Mapping] if_log_debug_print = " << if_log_debug_print);
     p_pre->set_if_log_debug_print(if_log_debug_print);
 
-    nh.param<bool>("if_log_speed_print", if_log_speed_print, true);
-    nh.param<bool>("if_log_idel_print", if_log_idel_print, true);
+    pnh.param<bool>("if_log_speed_print", if_log_speed_print, true);
+    ROS_INFO_STREAM("[Mapping] if_log_speed_print = " << if_log_speed_print);
+    pnh.param<bool>("if_log_idel_print", if_log_idel_print, true);
+    ROS_INFO_STREAM("[Mapping] if_log_idel_print = " << if_log_idel_print);
     nh.param<double>("frequency_hz_log_speed", frequency_hz_log_speed, 3);
-    nh.param<bool>("if_cropself", if_cropself, true);
+    pnh.param<bool>("if_cropself", if_cropself, true);
+    ROS_INFO_STREAM("[Mapping] if_cropself = " << if_cropself);
 
     nh.getParam("max_x", max_x);
     nh.getParam("min_x", min_x);
