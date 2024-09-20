@@ -676,13 +676,16 @@ void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
         {
             updateTimeName(ros::Time().fromSec(lidar_end_time));
             pcd_index++;
-            // string all_points_dir(string(string(ROOT_DIR) + "PCD/scans_") + to_string(pcd_index) + string(".pcd"));
-            pcl::PCDWriter pcd_writer;
-            if (if_log_debug_print){
-                ROS_INFO_STREAM( "[Mapping][pcd path]current scan saved to " << fullFileName(savePcdPath) );
+            try {
+                pcl::io::savePCDFileASCII(fullFileName(savePcdPath), *pcl_wait_save);
+                if (if_log_debug_print){
+                    ROS_INFO_STREAM( "[Mapping][pcd path]current scan saved to " << fullFileName(savePcdPath)<<"." );
+                }
+            }catch(std::exception &e){
+                ROS_WARN_STREAM("[Mapping][pcd path] CAN NOT save pcd file to "<< savePcdPath.filename);
+                ROS_WARN_STREAM("[Mapping][pcd path] save current scan to default folder" << folderString_default << savePcdPath.filename<<"."<<savePcdPath.extension);
+                pcl::io::savePCDFileASCII( folderString_default+ "/" +  FileNameExt(savePcdPath), *pcl_wait_save);
             }
-            pcl::io::savePCDFileASCII(fullFileName(savePcdPath), *pcl_wait_save);
-            // pcd_writer.writeBinary(all_points_dir, *pcl_wait_save);
             pcl_wait_save->clear();
             scan_wait_num = 0;
         }
@@ -1001,7 +1004,7 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
     if (effct_feat_num < 1)
     {
         ekfom_data.valid = false;
-        ROS_WARN("No Effective Points! \n");
+        ROS_WARN("[Mapping][h_share_model]No Effective Points! \n");
         return;
     }
 
@@ -1090,7 +1093,7 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "laserMapping");
     ros::NodeHandle nh;
-    ros::NodeHandle pnh("~"); // private node handle
+    //ros::NodeHandle pnh("~"); // private node handle
 
     nh.param<string>("publish/map_frame_name", map_frame_name, "map");
     nh.param<string>("publish/body_frame_name", body_frame_name, "base_link");
@@ -1123,27 +1126,27 @@ int main(int argc, char **argv)
     nh.param<bool>("feature_extract_enable", p_pre->feature_enabled, false);
     nh.param<bool>("runtime_pos_log_enable", runtime_pos_log, 0);
     nh.param<bool>("mapping/extrinsic_est_en", extrinsic_est_en, true);
-    pnh.param<bool>("pcd_save/pcd_save_en", pcd_save_en, true);
+    nh.param<bool>("pcd_save/pcd_save_en", pcd_save_en, true);
     ROS_INFO_STREAM("[Mapping] pcd_save_en = " << pcd_save_en);
     nh.param<int>("pcd_save/interval", pcd_save_interval, -1);
     nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
     nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
-    pnh.param<std::string>("folderString", folderString_default, "/home/loopx/rosbag/pcd");
+    nh.param<std::string>("folderString", folderString_default, "/home/loopx/rosbag/pcd");
     ROS_INFO_STREAM("[Mapping] folderString_default = " << folderString_default);
 
     nh.getParam("front_lidar_base2lidar", front_lidar_2_base);
     nh.getParam("rear_lidar_base2lidar", rear_lidar_2_base);
 
-    pnh.param<bool>("if_log_debug_print", if_log_debug_print, false);
+    nh.param<bool>("if_log_debug_print", if_log_debug_print, false);
     ROS_INFO_STREAM("[Mapping] if_log_debug_print = " << if_log_debug_print);
     p_pre->set_if_log_debug_print(if_log_debug_print);
 
-    pnh.param<bool>("if_log_speed_print", if_log_speed_print, true);
+    nh.param<bool>("if_log_speed_print", if_log_speed_print, true);
     ROS_INFO_STREAM("[Mapping] if_log_speed_print = " << if_log_speed_print);
-    pnh.param<bool>("if_log_idel_print", if_log_idel_print, true);
+    nh.param<bool>("if_log_idel_print", if_log_idel_print, true);
     ROS_INFO_STREAM("[Mapping] if_log_idel_print = " << if_log_idel_print);
     nh.param<double>("frequency_hz_log_speed", frequency_hz_log_speed, 3);
-    pnh.param<bool>("if_cropself", if_cropself, true);
+    nh.param<bool>("if_cropself", if_cropself, true);
     ROS_INFO_STREAM("[Mapping] if_cropself = " << if_cropself);
 
     nh.getParam("max_x", max_x);
@@ -1232,7 +1235,6 @@ int main(int argc, char **argv)
     ros::Publisher pub_orig = nh.advertise<sensor_msgs::PointCloud2>("/cloud_orig", 100000);
     ros::Publisher pubLaserCloudMap = nh.advertise<sensor_msgs::PointCloud2>("/Laser_map", 100000);
     ros::Publisher pub_cuboid_8pts =  nh.advertise<sensor_msgs::PointCloud2>("/self_cuboid", 1);
-
 
     // ros::Publisher pubLaserFeaturePoints = nh.advertise<sensor_msgs::PointCloud2>
     //         ("/Laser_feature_points", 100000);
