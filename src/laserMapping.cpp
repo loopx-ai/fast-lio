@@ -48,6 +48,7 @@
 #include <nav_msgs/Path.h>
 #include <visualization_msgs/Marker.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/common/common.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
@@ -101,10 +102,13 @@ bool lidar_pushed, flg_first_scan = true, flg_exit = false, flg_EKF_inited;
 bool scan_pub_en = true, dense_pub_en = false, scan_body_pub_en = false;
 string map_frame_name, body_frame_name;
 double max_x, min_x, max_y, min_y, max_z, min_z;
-std::vector<float> front_lidar_2_base, rear_lidar_2_base;
-
+//std::vector<float> front_lidar_2_base, rear_lidar_2_base;
+std::vector<float> base_2_front_lidar, base_2_rear_lidar;
+tf::Transform *trans_ptr;
 tf::Transform tf_front_lidar_2_base;
 tf::Transform tf_rear_lidar_2_base;
+int using_lidar_dirct;
+Eigen::Affine3f *transform_lidar_2_base_ptr;
 
 vector<vector<int>> pointSearchInd_surf;
 vector<BoxPointType> cub_needrm;
@@ -127,7 +131,10 @@ PointCloudXYZI::Ptr _featsArray;
 PointCloudXYZI::Ptr pcl_feature_full(new PointCloudXYZI());
 PointCloudXYZI::Ptr pcl_feature_surf(new PointCloudXYZI());
 PointCloudXYZI::Ptr pcl_feature_corn(new PointCloudXYZI());
-PointCloudXYZI::Ptr pcl_cuboid_8pts(new PointCloudXYZI());
+//PointCloudXYZI::Ptr pcl_cuboid_8pts(new PointCloudXYZI());
+pcl::PointCloud<pcl::PointXYZ>::Ptr  pcl_cuboid_8pts(new pcl::PointCloud<pcl::PointXYZ>);
+pcl::PointCloud<pcl::PointXYZ>::Ptr  pcl_cuboid_8pts_lidar_frame(new pcl::PointCloud<pcl::PointXYZ>);
+//PointCloudXYZI::Ptr pcl_cuboid_8pts_lidar_frame(new PointCloudXYZI());
 pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_orig_ptr(new pcl::PointCloud<pcl::PointXYZI>());
 
 pcl::VoxelGrid<PointType> downSizeFilterSurf;
@@ -180,14 +187,12 @@ double frequency_hz_log_speed = 3.0;
 shared_ptr<Preprocess> p_pre(new Preprocess());
 shared_ptr<ImuProcess> p_imu(new ImuProcess());
 
-
-
-std::vector<int> CropboxPolygonIndicesHandle(const livox_ros_driver::CustomMsg::ConstPtr &msg)
+std::vector<int> CropboxPolygonIndicesHandle(const livox_ros_driver::CustomMsg::ConstPtr &msg, Eigen::Affine3f * trans_aff_ptr)
 {
     cloud_orig_ptr->clear();
     cloud_orig_ptr->points.resize(int(msg->point_num));
     pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_tran_ptr(new pcl::PointCloud<pcl::PointXYZI>());
-
+    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_tran_crop_ptr(new pcl::PointCloud<pcl::PointXYZI>());
     for (int i = 0; i < msg->point_num; i++)
     {
         cloud_orig_ptr->points[i].x = msg->points[i].x;
@@ -195,16 +200,27 @@ std::vector<int> CropboxPolygonIndicesHandle(const livox_ros_driver::CustomMsg::
         cloud_orig_ptr->points[i].z = msg->points[i].z;
         cloud_orig_ptr->points[i].intensity= msg->points[i].reflectivity;
     }
+    cloud_orig_ptr->width = cloud_orig_ptr->points.size();
+    cloud_orig_ptr->height = 1;
+
+    cloud_tran_ptr = cloud_orig_ptr;
+    //pcl::io::savePCDFileASCII("/home/loopx/rosbag/no_crop.pcd", *cloud_orig_ptr);
+    //std::cout<<"save no_crop.pcd"<<std::endl;
     /* frame_id lidar to base_link */
+    //pcl::transformPointCloud (*cloud_orig_ptr, *cloud_tran_ptr, *trans_aff_ptr,false);
+    //pcl_ros::transformPointCloud(*cloud_orig_ptr, *cloud_tran_ptr, trans);
 
-    pcl_ros::transformPointCloud(*cloud_orig_ptr, *cloud_tran_ptr, tf_front_lidar_2_base);
-
+    //pcl::io::savePCDFileASCII("/home/loopx/rosbag/no_crop_trans.pcd", *cloud_tran_ptr);
+    //std::cout<<"save no_crop_trans.pcd"<<std::endl;
     /*crop self / crop a cuboid out */
     pcl::CropBox<pcl::PointXYZI> cropBoxFilter(true);
-    cropBoxFilter.setInputCloud(cloud_tran_ptr);
+    cropBoxFilter.setInputCloud(cloud_orig_ptr);
     cropBoxFilter.setNegative(true);
-    Eigen::Vector4f min_pt(min_x, min_y, min_z, 1.0f);
-    Eigen::Vector4f max_pt(max_x, max_y, max_z, 1.0f);
+
+    pcl::PointXYZ minPt, maxPt;
+    pcl::getMinMax3D<pcl::PointXYZ> (*pcl_cuboid_8pts_lidar_frame, minPt, maxPt);
+    Eigen::Vector4f min_pt(minPt.x, minPt.y, minPt.z, 1.0f);
+    Eigen::Vector4f max_pt(maxPt.x, maxPt.y, maxPt.z, 1.0f);
 
     // Cropbox slighlty bigger then bounding box of points
     cropBoxFilter.setMin(min_pt);
@@ -213,7 +229,10 @@ std::vector<int> CropboxPolygonIndicesHandle(const livox_ros_driver::CustomMsg::
     // Indices
     vector<int> indices;
     cropBoxFilter.filter(indices);
+    // cropBoxFilter.filter(*cloud_tran_crop_ptr);
     // cropBoxFilter.getRemovedIndices(indices);
+    //std::cout<<"save crop_trans.pcd"<<std::endl;
+    //pcl::io::savePCDFileASCII("/home/loopx/rosbag/crop_trans.pcd", *cloud_tran_crop_ptr);
     return (indices);
 }
 
@@ -392,6 +411,7 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
 double timediff_lidar_wrt_imu = 0.0;
 bool timediff_set_flg = false;
+
 void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg){
     if (!if_init_time_sec){
         time_init_sec = msg->header.stamp.toSec();
@@ -426,8 +446,12 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg){
     sensor_msgs::PointCloud2 ros_pc_msg_feature_surf;
     sensor_msgs::PointCloud2 ros_pc_msg_feature_corn;
 
-    std::vector<int> index_cropself = CropboxPolygonIndicesHandle(msg);
+    std::vector<int> index_cropself = CropboxPolygonIndicesHandle(msg, transform_lidar_2_base_ptr);
     p_pre->process(msg, index_cropself, pcl_feature_full, pcl_feature_surf, pcl_feature_corn);
+    //pcl::transformPointCloud (*pcl_feature_full, *pcl_feature_full, *transform_lidar_2_base_ptr,false);
+    //pcl::transformPointCloud (*pcl_feature_surf, *pcl_feature_surf, *transform_lidar_2_base_ptr,false);
+    //pcl::transformPointCloud (*pcl_feature_corn, *pcl_feature_corn, *transform_lidar_2_base_ptr,false);
+    
     pcl::toROSMsg(*pcl_feature_full, ros_pc_msg_feature_full);
     pcl::toROSMsg(*pcl_feature_surf, ros_pc_msg_feature_surf);
     pcl::toROSMsg(*pcl_feature_corn, ros_pc_msg_feature_corn);
@@ -691,7 +715,7 @@ void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
         }
     }
 }
-
+/*
 void publish_frame_body(const ros::Publisher &pubLaserCloudFull_body)
 {
     int size = feats_undistort->points.size();
@@ -710,6 +734,7 @@ void publish_frame_body(const ros::Publisher &pubLaserCloudFull_body)
     pubLaserCloudFull_body.publish(laserCloudmsg);
     publish_count -= PUBFRAME_PERIOD;
 }
+*/
 
 void publish_effect_world(const ros::Publisher &pubLaserCloudEffect)
 {
@@ -726,7 +751,7 @@ void publish_effect_world(const ros::Publisher &pubLaserCloudEffect)
     laserCloudFullRes3.header.frame_id = map_frame_name;
     pubLaserCloudEffect.publish(laserCloudFullRes3);
 }
-
+/*
 void publish_map(const ros::Publisher &pubLaserCloudMap)
 {
     sensor_msgs::PointCloud2 laserCloudMap;
@@ -734,7 +759,7 @@ void publish_map(const ros::Publisher &pubLaserCloudMap)
     laserCloudMap.header.stamp = ros::Time().fromSec(lidar_end_time);
     laserCloudMap.header.frame_id = map_frame_name;
     pubLaserCloudMap.publish(laserCloudMap);
-}
+}*/
 
 template <typename T>
 void set_posestamp(T &out)
@@ -1075,12 +1100,13 @@ void set_self_cuboid(){
     pcl_cuboid_8pts->points[5].z=min_z;
 
     pcl_cuboid_8pts->points[6].x=max_x;
-    pcl_cuboid_8pts->points[6].y=max_y;
+    pcl_cuboid_8pts->points[6].y=min_y;
     pcl_cuboid_8pts->points[6].z=max_z;
 
     pcl_cuboid_8pts->points[7].x=max_x;
-    pcl_cuboid_8pts->points[7].y=min_y;
+    pcl_cuboid_8pts->points[7].y=max_y;
     pcl_cuboid_8pts->points[7].z=max_z;
+    //pcl::io::savePCDFileASCII("/home/loopx/rosbag/box_self.pcd", *pcl_cuboid_8pts);
 }
 
 void set_nocrop(){
@@ -1097,57 +1123,66 @@ int main(int argc, char **argv)
 
     nh.param<string>("publish/map_frame_name", map_frame_name, "map");
     nh.param<string>("publish/body_frame_name", body_frame_name, "base_link");
-    nh.param<bool>("publish/path_en", path_en, true);
-    nh.param<bool>("publish/scan_publish_en", scan_pub_en, true);
-    nh.param<bool>("publish/dense_publish_en", dense_pub_en, true);
-    nh.param<bool>("publish/scan_bodyframe_pub_en", scan_body_pub_en, true);
-    nh.param<int>("max_iteration", NUM_MAX_ITERATIONS, 4);
+    nh.param<bool>  ("publish/path_en", path_en, true);
+    nh.param<bool>  ("publish/scan_publish_en", scan_pub_en, true);
+    nh.param<bool>  ("publish/dense_publish_en", dense_pub_en, true);
+    nh.param<bool>  ("publish/scan_bodyframe_pub_en", scan_body_pub_en, true);
+
+    nh.param<int>   ("max_iteration", NUM_MAX_ITERATIONS, 4);
     nh.param<string>("map_file_path", map_file_path, "");
-    nh.param<string>("common/lid_topic", lid_topic, "/livox/lidar");
-    nh.param<string>("common/imu_topic", imu_topic, "/livox/imu");
-    nh.param<bool>("common/time_sync_en", time_sync_en, false);
-    nh.param<double>("common/time_offset_lidar_to_imu", time_diff_lidar_to_imu, 0.0);
     nh.param<double>("filter_size_corner", filter_size_corner_min, 0.5);
     nh.param<double>("filter_size_surf", filter_size_surf_min, 0.5);
     nh.param<double>("filter_size_map", filter_size_map_min, 0.5);
     nh.param<double>("cube_side_length", cube_len, 200);
-    nh.param<float>("mapping/det_range", DET_RANGE, 500.f);
+
+    nh.param<string>("common/lid_topic", lid_topic, "/livox/lidar");
+    nh.param<string>("common/imu_topic", imu_topic, "/livox/imu");
+    nh.param<bool>  ("common/time_sync_en", time_sync_en, false);
+    nh.param<double>("common/time_offset_lidar_to_imu", time_diff_lidar_to_imu, 0.0);
+
+    nh.param<float> ("mapping/det_range", DET_RANGE, 500.f);
     nh.param<double>("mapping/fov_degree", fov_deg, 180);
     nh.param<double>("mapping/gyr_cov", gyr_cov, 0.1);
     nh.param<double>("mapping/acc_cov", acc_cov, 0.1);
     nh.param<double>("mapping/b_gyr_cov", b_gyr_cov, 0.0001);
     nh.param<double>("mapping/b_acc_cov", b_acc_cov, 0.0001);
+    nh.param<bool>  ("mapping/extrinsic_est_en", extrinsic_est_en, true);
+    nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
+    nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
+
     nh.param<double>("preprocess/blind", p_pre->blind, 0.01);
-    nh.param<int>("preprocess/lidar_type", p_pre->lidar_type, AVIA);
-    nh.param<int>("preprocess/scan_line", p_pre->N_SCANS, 16);
-    nh.param<int>("preprocess/timestamp_unit", p_pre->time_unit, US);
-    nh.param<int>("preprocess/scan_rate", p_pre->SCAN_RATE, 10);
+    nh.param<int>   ("preprocess/lidar_type", p_pre->lidar_type, AVIA);
+    nh.param<int>   ("preprocess/scan_line", p_pre->N_SCANS, 16);
+    nh.param<int>   ("preprocess/timestamp_unit", p_pre->time_unit, US);
+    nh.param<int>   ("preprocess/scan_rate", p_pre->SCAN_RATE, 10);
+    nh.param<bool>  ("preprocess/if_cropself", if_cropself, true);
+    ROS_INFO_STREAM("[Mapping] if_cropself = " << if_cropself);
+
     nh.param<int>("point_filter_num", p_pre->point_filter_num, 2);
     nh.param<bool>("feature_extract_enable", p_pre->feature_enabled, false);
     nh.param<bool>("runtime_pos_log_enable", runtime_pos_log, 0);
-    nh.param<bool>("mapping/extrinsic_est_en", extrinsic_est_en, true);
+
     nh.param<bool>("pcd_save/pcd_save_en", pcd_save_en, true);
     ROS_INFO_STREAM("[Mapping] pcd_save_en = " << pcd_save_en);
     nh.param<int>("pcd_save/interval", pcd_save_interval, -1);
-    nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
-    nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
-    nh.param<std::string>("folderString", folderString_default, "/home/loopx/rosbag/pcd");
+    nh.param<std::string>("pcd_save/folderString", folderString_default, "/home/loopx/rosbag/pcd");
     ROS_INFO_STREAM("[Mapping] folderString_default = " << folderString_default);
 
-    nh.getParam("front_lidar_base2lidar", front_lidar_2_base);
-    nh.getParam("rear_lidar_base2lidar", rear_lidar_2_base);
+    nh.getParam("front_lidar_base2lidar", base_2_front_lidar);
+    nh.getParam("rear_lidar_base2lidar", base_2_rear_lidar);
+    //nh.getParam("front_lidar_base2lidar", front_lidar_2_base);
+    //nh.getParam("rear_lidar_base2lidar", rear_lidar_2_base);
+    nh.getParam("using_lidar_dirct", using_lidar_dirct);
 
-    nh.param<bool>("if_log_debug_print", if_log_debug_print, false);
+    nh.param<bool>("log/if_log_debug_print", if_log_debug_print, false);
     ROS_INFO_STREAM("[Mapping] if_log_debug_print = " << if_log_debug_print);
     p_pre->set_if_log_debug_print(if_log_debug_print);
-
-    nh.param<bool>("if_log_speed_print", if_log_speed_print, true);
+    nh.param<bool>("log/if_log_speed_print", if_log_speed_print, true);
     ROS_INFO_STREAM("[Mapping] if_log_speed_print = " << if_log_speed_print);
-    nh.param<bool>("if_log_idel_print", if_log_idel_print, true);
+    nh.param<bool>("log/if_log_idel_print", if_log_idel_print, true);
     ROS_INFO_STREAM("[Mapping] if_log_idel_print = " << if_log_idel_print);
     nh.param<double>("frequency_hz_log_speed", frequency_hz_log_speed, 3);
-    nh.param<bool>("if_cropself", if_cropself, true);
-    ROS_INFO_STREAM("[Mapping] if_cropself = " << if_cropself);
+
 
     nh.getParam("max_x", max_x);
     nh.getParam("min_x", min_x);
@@ -1160,17 +1195,74 @@ int main(int argc, char **argv)
     }
     set_self_cuboid();
 
-    front_lidar_2_base.resize(6);
-    rear_lidar_2_base.resize(6);
-
-    tf_front_lidar_2_base.setRotation(tf::createQuaternionFromRPY(front_lidar_2_base[3], front_lidar_2_base[4], front_lidar_2_base[5]));
-    tf_front_lidar_2_base.setOrigin(tf::Vector3(front_lidar_2_base[0], front_lidar_2_base[1], front_lidar_2_base[2]));
-
     if (if_log_debug_print){
         ROS_INFO_STREAM("[Mapping] Crop self box polygon : max_x = " << max_x << ", min_x = " << min_x << ", max_y = " << max_y << ", min_y = " << min_y << ", max_z = " << max_z << ", min_z = " << min_z);
-        ROS_INFO_STREAM("[Mapping] tf_front_lidar_2_base : x = " << front_lidar_2_base[0] << ", y = " << front_lidar_2_base[1] << ", z = " << front_lidar_2_base[2] << ", roll = " << front_lidar_2_base[3] << ", pitch = " << front_lidar_2_base[4] << ", yaw = " << front_lidar_2_base[5] << ".");
+        ROS_INFO_STREAM("[Mapping] tf_front_lidar_2_base : x = " << base_2_front_lidar[0] << ", y = " << base_2_front_lidar[1] << ", z = " << base_2_front_lidar[2] << ", roll = " << base_2_front_lidar[3] << ", pitch = " << base_2_front_lidar[4] << ", yaw = " << base_2_front_lidar[5] << ".");
+        ROS_INFO_STREAM("[Mapping] tf_rear_lidar_2_base : x = " << base_2_rear_lidar[0] << ", y = " << base_2_rear_lidar[1] << ", z = " << base_2_rear_lidar[2] << ", roll = " << base_2_rear_lidar[3] << ", pitch = " << base_2_rear_lidar[4] << ", yaw = " << base_2_rear_lidar[5] << ".");
     }
 
+    Eigen::Affine3f transform_front_lidar_2_base =  Eigen::Affine3f::Identity();
+    transform_front_lidar_2_base.rotate(Eigen::AngleAxisf(base_2_front_lidar[3], Eigen::Vector3f::UnitX())
+                                      * Eigen::AngleAxisf(base_2_front_lidar[4], Eigen::Vector3f::UnitY())
+                                      * Eigen::AngleAxisf(base_2_front_lidar[5], Eigen::Vector3f::UnitZ()));
+    transform_front_lidar_2_base.translation() << base_2_front_lidar[0], base_2_front_lidar[1] ,base_2_front_lidar[2]+min_z;
+    std::cout<<"transform_front_lidar_2_base"<<std::endl;
+    std::cout<<transform_front_lidar_2_base.matrix()<<std::endl;
+
+    Eigen::Affine3f transform_rear_lidar_2_base =  Eigen::Affine3f::Identity();
+    transform_rear_lidar_2_base.rotate(Eigen::AngleAxisf(base_2_rear_lidar[3], Eigen::Vector3f::UnitX())
+                                     * Eigen::AngleAxisf(base_2_rear_lidar[4], Eigen::Vector3f::UnitY())
+                                     * Eigen::AngleAxisf(base_2_rear_lidar[5], Eigen::Vector3f::UnitZ()));
+    transform_rear_lidar_2_base.translation() << base_2_rear_lidar[0], base_2_rear_lidar[1] ,base_2_rear_lidar[2]+min_z;
+    std::cout<<"transform_rear_lidar_2_base"<<std::endl;
+    std::cout<<transform_rear_lidar_2_base.matrix()<<std::endl;
+
+
+/*
+    Eigen::Affine3f transform_base_2_front_lidar = Eigen::Affine3f::Identity();
+    transform_base_2_front_lidar.translation() << -base_2_front_lidar[0], -base_2_front_lidar[1], -(base_2_front_lidar[2]+min_z);
+    transform_base_2_front_lidar.rotate(Eigen::AngleAxisf(-base_2_front_lidar[3], Eigen::Vector3f::UnitX())
+                                      * Eigen::AngleAxisf(-base_2_front_lidar[4], Eigen::Vector3f::UnitY())
+                                      * Eigen::AngleAxisf(-base_2_front_lidar[5], Eigen::Vector3f::UnitZ()));
+    std::cout<<"transform_base_2_front_lidar"<<std::endl;
+    std::cout<<transform_base_2_front_lidar.matrix()<<std::endl;
+
+    Eigen::Affine3f transform_base_2_rear_lidar = Eigen::Affine3f::Identity();
+    transform_base_2_rear_lidar.translation() << -base_2_rear_lidar[0], -base_2_rear_lidar[1], -(base_2_rear_lidar[2]+min_z);
+    transform_base_2_rear_lidar.rotate(Eigen::AngleAxisf(-base_2_rear_lidar[3], Eigen::Vector3f::UnitX())
+                                     * Eigen::AngleAxisf(-base_2_rear_lidar[4], Eigen::Vector3f::UnitY())
+                                     * Eigen::AngleAxisf(-base_2_rear_lidar[5], Eigen::Vector3f::UnitZ()));
+
+    std::cout<<"transform_base_2_rear_lidar"<<std::endl;
+    std::cout<<transform_base_2_rear_lidar.matrix()<<std::endl;
+*/
+
+    ROS_INFO_STREAM("[Mapping] using_lidar_dirct = "<<using_lidar_dirct<<" ");
+    switch (using_lidar_dirct){
+    case FRONT:
+         pcl::transformPointCloud (*pcl_cuboid_8pts, *pcl_cuboid_8pts_lidar_frame, transform_front_lidar_2_base.inverse(),false);
+         std::cout<<"transform_front_lidar_2_base.inverse()"<<std::endl;
+         std::cout<<transform_front_lidar_2_base.inverse().matrix()<<std::endl;
+         //transform_lidar_2_base_ptr = &transform_front_lidar_2_base;
+         break;
+    case REAR:
+         pcl::transformPointCloud (*pcl_cuboid_8pts, *pcl_cuboid_8pts_lidar_frame, transform_rear_lidar_2_base.inverse(),false);
+         std::cout<<"transform_rear_lidar_2_base.inverse()"<<std::endl;
+         std::cout<<transform_rear_lidar_2_base.inverse().matrix()<<std::endl;
+         //transform_lidar_2_base_ptr = &transform_rear_lidar_2_base;
+         break;
+    case LEFT:
+         break;
+    case RIGHT:
+         break;
+    case FRONT_REAR:
+         break;
+    default:
+         pcl::transformPointCloud (*pcl_cuboid_8pts, *pcl_cuboid_8pts_lidar_frame, transform_front_lidar_2_base.inverse(),false);
+         //transform_lidar_2_base_ptr = &transform_front_lidar_2_base;
+         break;
+    }
+    // pcl::io::savePCDFileASCII("/home/loopx/rosbag/trans_8pts.pcd", *pcl_cuboid_8pts_lidar_frame);
     /*
     cout << "p_pre->lidar_type " << p_pre->lidar_type << endl;
     cout << "lid_topic = " << lid_topic << endl;
@@ -1226,14 +1318,14 @@ int main(int argc, char **argv)
     ros::Subscriber sub_pcl = p_pre->lidar_type == AVIA ? nh.subscribe(lid_topic, 200000, livox_pcl_cbk) : nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
     ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200000, imu_cbk);
     ros::Publisher pubLaserCloudFull = nh.advertise<sensor_msgs::PointCloud2>("/cloud_registered", 100000);
-    ros::Publisher pubLaserCloudFull_body = nh.advertise<sensor_msgs::PointCloud2>("/cloud_registered_body", 100000);
+    //ros::Publisher pubLaserCloudFull_body = nh.advertise<sensor_msgs::PointCloud2>("/cloud_registered_body", 100000);
     ros::Publisher pubLaserCloudEffect = nh.advertise<sensor_msgs::PointCloud2>("/cloud_effected", 100000);
 
     ros::Publisher pub_full = nh.advertise<sensor_msgs::PointCloud2>("/cloud_feature_full", 100000);
     ros::Publisher pub_surf = nh.advertise<sensor_msgs::PointCloud2>("/cloud_feature_surf", 100000);
     ros::Publisher pub_corn = nh.advertise<sensor_msgs::PointCloud2>("/cloud_feature_corn", 100000);
     ros::Publisher pub_orig = nh.advertise<sensor_msgs::PointCloud2>("/cloud_orig", 100000);
-    ros::Publisher pubLaserCloudMap = nh.advertise<sensor_msgs::PointCloud2>("/Laser_map", 100000);
+    // = nh.advertise<sensor_msgs::PointCloud2>("/laser_map", 100000);
     ros::Publisher pub_cuboid_8pts =  nh.advertise<sensor_msgs::PointCloud2>("/self_cuboid", 1);
 
     // ros::Publisher pubLaserFeaturePoints = nh.advertise<sensor_msgs::PointCloud2>
@@ -1376,12 +1468,20 @@ int main(int argc, char **argv)
             if (scan_pub_en || pcd_save_en)
                 publish_frame_world(pubLaserCloudFull);
             if (scan_pub_en && scan_body_pub_en)
-                publish_frame_body(pubLaserCloudFull_body);
-            publish_cloud(pub_full, pcl_feature_full, body_frame_name);
-            publish_cloud(pub_corn, pcl_feature_corn, body_frame_name);
-            publish_cloud(pub_surf, pcl_feature_surf, body_frame_name);
+                //publish_frame_body(pubLaserCloudFull_body);
+                publish_cloud(pub_full, pcl_feature_full, body_frame_name);
+                publish_cloud(pub_corn, pcl_feature_corn, body_frame_name);
+                publish_cloud(pub_surf, pcl_feature_surf, body_frame_name);
+
+            PointCloudXYZI::Ptr pcl_cuboid_8pts_fit(new PointCloudXYZI());
+            pcl_cuboid_8pts_fit->points.resize(8);
             if (pub_cuboid_8pts.getNumSubscribers()!= 0){
-                publish_cloud(pub_cuboid_8pts, pcl_cuboid_8pts,body_frame_name);
+                for(int i=0; i<int(pcl_cuboid_8pts->points.size());i++ ){
+                   pcl_cuboid_8pts_fit->points[i].x= pcl_cuboid_8pts->points[i].x + min_x;
+                   pcl_cuboid_8pts_fit->points[i].y= pcl_cuboid_8pts->points[i].y;
+                   pcl_cuboid_8pts_fit->points[i].z= pcl_cuboid_8pts->points[i].z;
+                }
+                publish_cloud(pub_cuboid_8pts, pcl_cuboid_8pts_fit, body_frame_name);
             }
             if (pub_orig.getNumSubscribers()!= 0){
                 sensor_msgs::PointCloud2 ros_pc2_msg;

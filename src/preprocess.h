@@ -10,26 +10,50 @@ using namespace std;
 typedef pcl::PointXYZINormal PointType;
 typedef pcl::PointCloud<PointType> PointCloudXYZI;
 
-enum LID_TYPE{AVIA = 1, VELO16, OUST64, AVIA_CROP}; //{1, 2, 3, 4}
+enum LID_TYPE{AVIA = 1, VELO16, OUST64}; //{1, 2, 3}
 enum TIME_UNIT{SEC = 0, MS = 1, US = 2, NS = 3};
-enum Feature{Nor, Poss_Plane, Real_Plane, Edge_Jump, Edge_Plane, Wire, ZeroPoint};
+enum Feature{Normal_Point, // normal points  //Nor
+             Poss_Plane,   // point is possible in plane
+             Real_Plane,   // definetly the point in a plane
+             Edge_Jump,    // the point jumps over
+             Edge_Plane,   // the point on jumps over plane
+             Wire,         // small section wire
+             ZeroPoint};
 enum Surround{Prev, Next};
-enum E_jump{Nr_nor, Nr_zero, Nr_180, Nr_inf, Nr_blind};
+
+enum E_jump{Nr_nor,    //normal
+            Nr_zero,   //0
+            Nr_180,    //180
+            Nr_inf,    //infinit
+            Nr_blind}; //blind area
+
+enum LID_DIRCT{FRONT = 1, REAR, LEFT, RIGHT, FRONT_REAR}; //{1, 2, 3, 4}
 
 struct orgtype
 {
-  double range;
-  double dista; 
-  double angle[2];
-  double intersect;
-  E_jump edj[2];
+  // Lidar origin : O, Previous point: P, Current point: C, Next point: N
+
+  //          p     C      N
+  //          .     .      .
+  //           \    |     /
+  //            \   |    /
+  //             \  |   /
+  //              \ |  /
+  //               \| /
+  //                . 
+  //                O  lidar     
+  double dist_2_xy_plane;  //point to xy plane lidar origin //range
+  double dist_2_next_pt;   //distance from this point the next one. //dista
+  double angle[2];   //cos(∠OCP), cos(∠OCN)
+  double intersect;  //cos(∠PCN)
+  E_jump etype_adjacent_pts[2];     //edge feature type of Previous point and next point  //edj      
   Feature ftype;
   orgtype()
   {
-    range = 0;
-    edj[Prev] = Nr_nor;
-    edj[Next] = Nr_nor;
-    ftype = Nor;
+    dist_2_xy_plane = 0;
+    etype_adjacent_pts[Prev] = Nr_nor;
+    etype_adjacent_pts[Next] = Nr_nor;
+    ftype = Normal_Point;
     intersect = 2;
   }
 };
@@ -123,13 +147,15 @@ class Preprocess
   bool edge_jump_judge(const PointCloudXYZI &pl, vector<orgtype> &types, uint i, Surround nor_dir);
   
   int group_size;
-  double disA, disB, inf_bound;
-  double limit_maxmid, limit_midmin, limit_maxmin;
-  double p2l_ratio;
+  double inf_bound;   //if distance > inf_bound, then invalid
+  double disA, disB ; //threshold for determing if the point in a plane
+  double limit_maxmid, limit_midmin, limit_maxmin; // mid point to left, mid point to right, left to right
+  double pt_2_line_ratio;  //threshold > distance from point to line,  then it is a plane //p2l_ratio
   double jump_up_limit, jump_down_limit;
   double cos160;
-  double edgea, edgeb;
-  double smallp_intersect, smallp_ratio;
-  double vx, vy, vz;
+  double edgea, edgeb;   //point to point  // distance between two pts > edgeb // block
+  double smallp_intersect, smallp_ratio; //
+  pcl::PointXYZ vector_pt;
+  //double vx, vy, vz;
   bool if_log_debug_print;
 };

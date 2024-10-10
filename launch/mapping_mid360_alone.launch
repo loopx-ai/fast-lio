@@ -5,39 +5,42 @@
   <!--<arg name="config_file" default="$(find fast_lio)/config/mid360.yaml" />-->
   <arg name="config_file" value="$(find clair_alert)/config/fast_lio.yaml" />
   <rosparam command="load" file="$(arg config_file)" />
-  <rosparam file="$(find clair_alert)/config/config.yaml" command="load"/>
+  <rosparam file="$(find clair_alert)/config/config_r1700.yaml" command="load"/>
 
   <arg name="if_log_debug_print" default="true" />
   <arg name="if_log_speed_print" default="true" />
   <arg name="if_log_idel_print" default="true" />
   <arg name="if_cropself"  default="true" />
-  <arg name="pcd_folder" default="$(find fast_lio)/PCD/" />
-  <arg name="save_pcd" default="false" />
+  <arg name="pcd_folder" default="$(find fast_lio)/PCD" />
+  <arg name="save_pcd" default="true" />
 
-  <param name="feature_extract_enable" type="bool" value="1" />
-  <param name="pcd_save_en" type="bool" value="0" />
-  <param name="pcd_save/interval" type="int" value="0" />
-  <param name="pcd_save/pcd_save_en" type="bool" value="1" />
-  <param name="pcd_save/interval" type="int" value="1" />
   <param name="point_filter_num" type="int" value="3" />
   <param name="max_iteration" type="int" value="3" />
-  <param name="filter_size_corner_min" type="double" value="0.2" />
+  <param name="filter_size_corner_min" type="double" value="0.05" />
+  <param name="filter_size_surf_min" type="double" value="0.1" />
+  
   <param name="cube_side_length" type="double" value="1000" />
   <param name="runtime_pos_log_enable" type="bool" value="1" />
+  <param name="feature_extract_enable" type="bool" value="1" />
+  <param name="using_lidar_dirct" type="int" value="2" /> <!--FRONT 1, REAR 2-->
+
+  <param name="pcd_save/pcd_save_en" type="bool" value="1" />
+  <param name="pcd_save/interval" type="int" value="1" />
+  <param name="pcd_save/folderString" type="string" value="$(arg pcd_folder)" />
+
   <param name="preprocess/lidar_type" type="int" value="1" />'
+  <param name="preprocess/if_cropself" type="bool" value="$(arg if_cropself)" />
 
-  <param name="if_log_debug_print" type="bool" value="$(arg if_log_debug_print)" />
-  <param name="if_log_speed_print" type="bool" value="$(arg if_log_speed_print)" />
-  <param name="if_log_idel_print" type="bool" value="$(arg if_log_idel_print)" />
-  <param name="if_cropself" type="bool" value="$(arg if_cropself)" />
-  <param name="frequency_hz_log_speed" type="double" value="0.333" />
-  <param name="folderString" type="string" value="$(arg pcd_folder)" />
-
+  <param name="log/if_log_debug_print" type="bool" value="$(arg if_log_debug_print)" />
+  <param name="log/if_log_speed_print" type="bool" value="$(arg if_log_speed_print)" />
+  <param name="log/if_log_idel_print" type="bool" value="$(arg if_log_idel_print)" />
+  <param name="log/frequency_hz_log_speed" type="double" value="0.333" />
 
   <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" respawn="true">
     <!--<remap from="$(arg livox_lidar_topic)" to="$(arg livox_lidar_topic)"/>-->
     <!--<remap from="/livox/lidar" to="/sensing/front/livox/lidar" />-->
-    <remap from="/livox/imu" to="/sensing/front/imu/imu_data" />
+    <!--<remap from="/livox/imu" to="/sensing/front/imu/imu_data" />-->
+    <remap from="/livox/imu" to="/sensing/rear/imu/imu_data" />
     <remap from="/Odometry"  to="/odom" />
     <remap from="/twist"     to="/twist" />
     <remap from="max_x"  to="/machine/mirror/max_x" />
@@ -64,6 +67,31 @@
         output="screen">
         <remap from="/livox/lidar" to="$(arg input/lidar0)" />
         <remap from="/livox/points" to="livox/points"/>
+      </node> 
+
+      <!-- IMU Filter -->
+      <node pkg="imu_complementary_filter" type="complementary_filter_node"
+        name="complementary_filter_gain_node" output="screen">
+        <remap from="imu/data_raw" to="livox/imu" />
+        <remap from="imu/data" to="imu/imu_data" />
+        <param name="acc_g_unit" value="true" />
+        <param name="do_bias_estimation" value="true" />
+        <param name="do_adaptive_gain" value="true" />
+        <param name="use_mag" value="false" />
+        <param name="gain_acc" value="0.004" />
+        <param name="gain_mag" value="0.01" />
+        <param name="bias_alpha" value="0.01" />
+        <param name="publish_debug_topics" value="false" />
+        <param name="publish_tf" value="false" />
+      </node>
+    </group> 
+
+    <group ns="rear">
+      <!-- Livox Convert -->
+      <node pkg="livox_to_points" type="livox_to_points_node" name="livox_to_points_node"
+        output="screen">
+        <remap from="/livox/lidar" to="$(arg input/lidar0)"/>
+        <remap from="/livox/points" to="livox/points" />
       </node>
 
       <!-- IMU Filter -->
@@ -82,21 +110,12 @@
         <param name="publish_tf" value="false" />
       </node>
     </group>
-
-    <group ns="rear">
-      <!-- Livox Convert -->
-      <node pkg="livox_to_points" type="livox_to_points_node" name="livox_to_points_node"
-        output="screen">
-        <remap from="/livox/lidar" to="livox/lidar" />
-        <remap from="/livox/points" to="livox/points" />
-      </node>
-    </group>
   </group>
 
   <group if="$(arg rviz)">
     <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz"
       args="-d $(find fast_lio)/rviz_cfg/loam_livox_.rviz">
-      <param name="/use_sim_time" value="true" />
+      <param name="/use_sim_time" value="false" />
     </node>
   </group>
 
