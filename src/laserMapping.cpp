@@ -562,7 +562,7 @@ void map_incremental()
     PointVector PointNoNeedDownsample;
     PointToAdd.reserve(feats_down_size);
     PointNoNeedDownsample.reserve(feats_down_size);
-    std::cout<<"feats_down_size = " <<feats_down_size<<std::endl;
+    //std::cout<<"feats_down_size = " <<feats_down_size<<std::endl;
     for (int i = 0; i < feats_down_size; i++)
     {
         /* transform to world frame */
@@ -709,7 +709,7 @@ void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
                 }
             }catch(std::exception &e){
                 ROS_WARN_STREAM("[Mapping][pcd path] CAN NOT save pcd file to "<< savePcdPath.filename);
-                ROS_WARN_STREAM("[Mapping][pcd path] save current scan to default folder" << folderString_default << savePcdPath.filename<<"."<<savePcdPath.extension);
+                ROS_WARN_STREAM("[Mapping][pcd path] save current scan to default folder" << folderString_default<<"/"<< savePcdPath.filename<<"."<<savePcdPath.extension);
                 pcl::io::savePCDFileASCII( folderString_default+ "/" +  FileNameExt(savePcdPath), *pcl_wait_save);
             }
             pcl_wait_save->clear();

@@ -40,7 +40,7 @@
   <param name="common/lid_topic"  type="string" value="/sensing/front/livox/lidar" />
   <param name="common/imu_topic"  type="string" value="/sensing/front/livox/imu" />
 
-  <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="log" respawn="true">
+  <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" respawn="true">
     <!--<remap from="$(arg livox_lidar_topic)" to="$(arg livox_lidar_topic)"/>-->
     <remap from="/Odometry"  to="/odom" />
     <remap from="/twist"     to="/twist" />
