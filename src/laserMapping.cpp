@@ -562,6 +562,7 @@ void map_incremental()
     PointVector PointNoNeedDownsample;
     PointToAdd.reserve(feats_down_size);
     PointNoNeedDownsample.reserve(feats_down_size);
+    std::cout<<"feats_down_size = " <<feats_down_size<<std::endl;
     for (int i = 0; i < feats_down_size; i++)
     {
         /* transform to world frame */
