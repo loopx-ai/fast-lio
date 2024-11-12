@@ -24,6 +24,8 @@
   <param name="runtime_pos_log_enable" type="bool" value="1" />
   <param name="feature_extract_enable" type="bool" value="1" />
 
+  <param name="mapping/det_range"  type="double" value="500" />
+
   <param name="pcd_save/pcd_save_en" type="bool" value="1" />
   <param name="pcd_save/interval" type="int" value="1" />
   <param name="pcd_save/folderString" type="string" value="$(arg pcd_folder)" />

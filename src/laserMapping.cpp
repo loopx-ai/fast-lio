@@ -80,7 +80,7 @@ bool runtime_pos_log = false, pcd_save_en = true, time_sync_en = false, extrinsi
 /**************************/
 
 float res_last[100000] = {0.0};
-float DET_RANGE = 3000.0f;
+float DET_RANGE = 500.0f;
 const float MOV_THRESHOLD = 2.5f;
 double time_diff_lidar_to_imu = 0.0;
 
@@ -144,7 +144,7 @@ ros::Publisher pubMarkerText;
 
 KD_TREE<PointType> ikdtree;
 
-V3F XAxisPoint_body(LIDAR_SP_LEN, 0.0, 0.0);
+V3F XAxisPoint_body( LIDAR_SP_LEN, 0.0, 0.0);
 V3F XAxisPoint_world(LIDAR_SP_LEN, 0.0, 0.0);
 V3D euler_cur;
 V3D position_last(Zero3d);
@@ -1384,7 +1384,7 @@ int main(int argc, char **argv)
             }
             int featsFromMapNum = ikdtree.validnum();
             kdtree_size_st = ikdtree.size();
-
+            //std::cout<<"ikdtree.size() = "<<ikdtree.size()<<std::endl;
             // cout<<"[ mapping ]: In num: "<<feats_undistort->points.size()<<" downsamp "<<feats_down_size<<" Map num: "<<featsFromMapNum<<"effect num:"<<effct_feat_num<<endl;
 
             /*** ICP and iterated Kalman filter update ***/
@@ -1515,6 +1515,7 @@ int main(int argc, char **argv)
     /**************** save map ****************/
     /* 1. make sure you have enough memories
     /* 2. pcd save will largely influence the real-time performences **/
+    std::cout<<"pcl_wait_save->size() = " <<pcl_wait_save->size()<<std::endl; 
     if (pcl_wait_save->size() > 0 && pcd_save_en)
     {
         string file_name = string("scans.pcd");
@@ -1524,7 +1525,11 @@ int main(int argc, char **argv)
            ROS_INFO_STREAM("current scan saved to /PCD/" << file_name);
         }
         //cout << "current scan saved to /PCD/" << file_name << endl;
-        pcd_writer.writeBinary(all_points_dir, *pcl_wait_save);
+        try {
+            pcd_writer.writeBinary(all_points_dir, *pcl_wait_save);
+        }catch(std::exception &e){
+            std::cout<<" Warning!!!!! "<< e.what()<<std::endl;
+        }
     }
 
     fout_out.close();

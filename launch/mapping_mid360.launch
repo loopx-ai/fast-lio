@@ -20,9 +20,9 @@
   <param name="cube_side_length" type="double" value="1000" />
   <param name="runtime_pos_log_enable" type="bool" value="1" />
 
-  <param name="filter_size_corner_min" type="double" value="0.1" />
-  <param name="filter_size_surf" type="double" value="0.05" />
-  <param name="filter_size_map" type="double" value="0.1" />
+  <param name="filter_size_corner_min" type="double" value="0.2" />
+  <param name="filter_size_surf" type="double" value="0.2" />
+  <param name="filter_size_map" type="double" value="0.2" />
       
   <param name="preprocess/lidar_type" type="int" value="1" />'
   <param name="preprocess/if_cropself" type="bool" value="$(arg if_cropself)" />
@@ -41,6 +41,24 @@
   <param name="common/imu_topic"  type="string" value="/sensing/front/livox/imu" />
 
   <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" respawn="true">
+    <param name="feature_extract_enable" type="bool" value="1" />
+    <param name="pcd_save/pcd_save_en" type="bool" value="$(arg save_pcd)" />
+    <param name="pcd_save/interval" type="int" value="1" />
+    <param name="point_filter_num" type="int" value="3" />
+    <param name="max_iteration" type="int" value="3" />
+    <param name="filter_size_corner_min" type="double" value="0.2" />
+    <param name="filter_size_surf" type="double" value="0.5" />
+    <param name="filter_size_map" type="double" value="0.5" />
+    <param name="cube_side_length" type="double" value="1000" />
+    <param name="runtime_pos_log_enable" type="bool" value="1" />
+    <param name="preprocess/lidar_type" type="int" value="1" />'
+    <param name="log/if_log_debug_print" type="bool" value="$(arg if_log_debug_print)" />
+    <param name="log/if_log_speed_print" type="bool" value="$(arg if_log_speed_print)" />
+    <param name="log/frequency_hz_log_speed" type="double" value="0.333" />
+    <param name="log/if_log_idel_print" type="bool" value="$(arg if_log_idel_print)" />
+    <param name="preprocess/if_cropself" type="bool" value="$(arg if_cropself)" />
+
+    <param name="folderString" type="string" value="$(arg pcd_folder)" />
     <!--<remap from="$(arg livox_lidar_topic)" to="$(arg livox_lidar_topic)"/>-->
     <!--<remap from="/livox/lidar" to="/sensing/front/livox/lidar" />-->
     <!--<remap from="/livox/imu" to="/sensing/front/imu/imu_data" />-->
