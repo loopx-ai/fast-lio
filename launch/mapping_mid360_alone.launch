@@ -17,8 +17,9 @@
 
   <param name="point_filter_num" type="int" value="3" />
   <param name="max_iteration" type="int" value="3" />
-  <param name="filter_size_corner_min" type="double" value="0.05" />
-  <param name="filter_size_surf_min" type="double" value="0.1" />
+  <param name="filter_size_corner" type="double" value="0.05" />
+  <param name="filter_size_surf"   type="double" value="0.1" />
+  <param name="filter_size_map"    type="double" value="0.1" />
   
   <param name="cube_side_length" type="double" value="2000" />
   <param name="runtime_pos_log_enable" type="bool" value="1" />
