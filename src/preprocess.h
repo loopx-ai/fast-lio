@@ -158,4 +158,5 @@ class Preprocess
   pcl::PointXYZ vector_pt;
   //double vx, vy, vz;
   bool if_log_debug_print;
+  double edge_point_angle_min, edge_point_angle_max;
 };

@@ -80,8 +80,8 @@ bool runtime_pos_log = false, pcd_save_en = true, time_sync_en = false, extrinsi
 /**************************/
 
 float res_last[100000] = {0.0};
-float DET_RANGE = 300.0f;
-const float MOV_THRESHOLD = 1.5f;
+float DET_RANGE = 3000.0f;
+const float MOV_THRESHOLD = 2.5f;
 double time_diff_lidar_to_imu = 0.0;
 
 mutex mtx_buffer;
@@ -456,7 +456,8 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg){
     pcl::toROSMsg(*pcl_feature_surf, ros_pc_msg_feature_surf);
     pcl::toROSMsg(*pcl_feature_corn, ros_pc_msg_feature_corn);
 
-    lidar_buffer.push_back(pcl_feature_surf);
+    //lidar_buffer.push_back(pcl_feature_surf);
+    lidar_buffer.push_back(pcl_feature_full);
     time_buffer.push_back(last_timestamp_lidar);
     static int count_laserin = 0;
     // std::cout<<count_laserin++<<" pcl_feature_surf_pointin.size() = "<<pcl_feature_surf->points.size()<<std::endl;
@@ -715,26 +716,6 @@ void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
         }
     }
 }
-/*
-void publish_frame_body(const ros::Publisher &pubLaserCloudFull_body)
-{
-    int size = feats_undistort->points.size();
-    PointCloudXYZI::Ptr laserCloudIMUBody(new PointCloudXYZI(size, 1));
-
-    for (int i = 0; i < size; i++)
-    {
-        RGBpointBodyLidarToIMU(&feats_undistort->points[i],
-                               &laserCloudIMUBody->points[i]);
-    }
-
-    sensor_msgs::PointCloud2 laserCloudmsg;
-    pcl::toROSMsg(*laserCloudIMUBody, laserCloudmsg);
-    laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time); // ros::Time::now();
-    laserCloudmsg.header.frame_id = body_frame_name;
-    pubLaserCloudFull_body.publish(laserCloudmsg);
-    publish_count -= PUBFRAME_PERIOD;
-}
-*/
 
 void publish_effect_world(const ros::Publisher &pubLaserCloudEffect)
 {
@@ -902,7 +883,7 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped, const ros::Publish
     // tf::Vector3 out_vel = inverseTransform.getBasis()* twist_vel + inverseTransform.getOrigin().cross(out_rot);
 
     // Temporary use: exit the program when the speed exceeds the threshold
-    if (abs(twist.twist.linear.x) > 20.0 || abs(twist.twist.linear.y) > 20.0)
+    if (abs(twist.twist.linear.x) > 8.3|| abs(twist.twist.linear.y) > 8.3)
     {
         ROS_ERROR("Speed exceeds the threshold, exit the program!");
         exit(0);
@@ -1181,7 +1162,7 @@ int main(int argc, char **argv)
     ROS_INFO_STREAM("[Mapping] if_log_speed_print = " << if_log_speed_print);
     nh.param<bool>("log/if_log_idel_print", if_log_idel_print, true);
     ROS_INFO_STREAM("[Mapping] if_log_idel_print = " << if_log_idel_print);
-    nh.param<double>("frequency_hz_log_speed", frequency_hz_log_speed, 3);
+    nh.param<double>("log/frequency_hz_log_speed", frequency_hz_log_speed, 3);
 
 
     nh.getParam("max_x", max_x);
@@ -1206,16 +1187,16 @@ int main(int argc, char **argv)
                                       * Eigen::AngleAxisf(base_2_front_lidar[4], Eigen::Vector3f::UnitY())
                                       * Eigen::AngleAxisf(base_2_front_lidar[5], Eigen::Vector3f::UnitZ()));
     transform_front_lidar_2_base.translation() << base_2_front_lidar[0], base_2_front_lidar[1] ,base_2_front_lidar[2]+min_z;
-    std::cout<<"transform_front_lidar_2_base"<<std::endl;
-    std::cout<<transform_front_lidar_2_base.matrix()<<std::endl;
+    //std::cout<<"transform_front_lidar_2_base"<<std::endl;
+    //std::cout<<transform_front_lidar_2_base.matrix()<<std::endl;
 
     Eigen::Affine3f transform_rear_lidar_2_base =  Eigen::Affine3f::Identity();
     transform_rear_lidar_2_base.rotate(Eigen::AngleAxisf(base_2_rear_lidar[3], Eigen::Vector3f::UnitX())
                                      * Eigen::AngleAxisf(base_2_rear_lidar[4], Eigen::Vector3f::UnitY())
                                      * Eigen::AngleAxisf(base_2_rear_lidar[5], Eigen::Vector3f::UnitZ()));
     transform_rear_lidar_2_base.translation() << base_2_rear_lidar[0], base_2_rear_lidar[1] ,base_2_rear_lidar[2]+min_z;
-    std::cout<<"transform_rear_lidar_2_base"<<std::endl;
-    std::cout<<transform_rear_lidar_2_base.matrix()<<std::endl;
+    //std::cout<<"transform_rear_lidar_2_base"<<std::endl;
+    //std::cout<<transform_rear_lidar_2_base.matrix()<<std::endl;
 
 
 /*
@@ -1263,10 +1244,10 @@ int main(int argc, char **argv)
          break;
     }
     // pcl::io::savePCDFileASCII("/home/loopx/rosbag/trans_8pts.pcd", *pcl_cuboid_8pts_lidar_frame);
-    /*
+    
     cout << "p_pre->lidar_type " << p_pre->lidar_type << endl;
     cout << "lid_topic = " << lid_topic << endl;
-    */
+    
 
     path.header.stamp = ros::Time::now();
     path.header.frame_id = map_frame_name;
@@ -1318,7 +1299,6 @@ int main(int argc, char **argv)
     ros::Subscriber sub_pcl = p_pre->lidar_type == AVIA ? nh.subscribe(lid_topic, 200000, livox_pcl_cbk) : nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
     ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200000, imu_cbk);
     ros::Publisher pubLaserCloudFull = nh.advertise<sensor_msgs::PointCloud2>("/cloud_registered", 100000);
-    //ros::Publisher pubLaserCloudFull_body = nh.advertise<sensor_msgs::PointCloud2>("/cloud_registered_body", 100000);
     ros::Publisher pubLaserCloudEffect = nh.advertise<sensor_msgs::PointCloud2>("/cloud_effected", 100000);
 
     ros::Publisher pub_full = nh.advertise<sensor_msgs::PointCloud2>("/cloud_feature_full", 100000);
@@ -1382,6 +1362,7 @@ int main(int argc, char **argv)
 
             /*** downsample the feature points in a scan ***/
             downSizeFilterSurf.setInputCloud(feats_undistort);
+            //downSizeFilterSurf.setInputCloud(pcl_feature_full);
             downSizeFilterSurf.filter(*feats_down_body);
             t1 = omp_get_wtime();
             feats_down_size = feats_down_body->points.size();

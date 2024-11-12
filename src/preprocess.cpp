@@ -13,11 +13,11 @@ Preprocess::Preprocess()
   disA = 0.01;
   disB = 0.1;
   pt_2_line_ratio = 225;
-  limit_maxmid    = 6.25;
-  limit_midmin    = 6.25;
-  limit_maxmin    = 3.24;
+  limit_maxmid    =   6.25;
+  limit_midmin    =   6.25;
+  limit_maxmin    =   3.24;
   jump_up_limit   = 170.0;
-  jump_down_limit = 8.0;
+  jump_down_limit =   8.0;
   cos160 = 160.0;
   edgea  = 2.0;
   edgeb  = 0.2;
@@ -30,7 +30,10 @@ Preprocess::Preprocess()
   cos160 = cos(cos160 / 180 * M_PI);
   smallp_intersect = cos(smallp_intersect / 180 * M_PI);
   if_log_debug_print = true;
-}
+
+  edge_point_angle_min = cos( 45 / 180 * M_PI);
+  edge_point_angle_max = cos(135 / 180 * M_PI);
+} 
 
 Preprocess::~Preprocess() {}
 
@@ -537,9 +540,9 @@ void Preprocess::give_feature(pcl::PointCloud<PointType> &pl, vector<orgtype> &t
   Eigen::Vector3d curr_direct(Eigen::Vector3d::Zero());
   Eigen::Vector3d last_direct(Eigen::Vector3d::Zero());
 
-  uint i_nex = 0, i2;
+  uint i_nex = 0, i_next; 
   uint last_i = 0;
-  uint last_i_nex = 0;
+  uint last_i_next = 0;
   int last_state = 0;
   int plane_type;
 
@@ -550,11 +553,11 @@ void Preprocess::give_feature(pcl::PointCloud<PointType> &pl, vector<orgtype> &t
       continue;
     }
 
-    i2 = i;
+    i_next = i;
 
     plane_type = plane_judge(pl, types, i, i_nex, curr_direct);
 
-    if (plane_type == 1)
+    if (plane_type == 1) // 1: plane
     {
       for (uint j = i; j <= i_nex; j++)
       {
@@ -572,8 +575,9 @@ void Preprocess::give_feature(pcl::PointCloud<PointType> &pl, vector<orgtype> &t
       if (last_state == 1 && last_direct.norm() > 0.1)
       {
         double mod = last_direct.transpose() * curr_direct;
-        // norm between 45 -135 degrre
-        if (mod > -0.707 && mod < 0.707)
+        // if norm between edge_point_angle_min and edge_point_angle_max,
+        // then this point consider as a point in edge plane
+        if (mod > edge_point_angle_max && mod < edge_point_angle_min)
         {
           types[i].ftype = Edge_Plane;
         }
@@ -591,55 +595,9 @@ void Preprocess::give_feature(pcl::PointCloud<PointType> &pl, vector<orgtype> &t
       i = i_nex;
       last_state = 0;
     }
-    // else if(plane_type == 0)
-    // {
-    //   if(last_state == 1)
-    //   {
-    //     uint i_nex_tem;
-    //     uint j;
-    //     for(j=last_i+1; j<=last_i_nex; j++)
-    //     {
-    //       uint i_nex_tem2 = i_nex_tem;
-    //       Eigen::Vector3d curr_direct2;
-
-    //       uint ttem = plane_judge(pl, types, j, i_nex_tem, curr_direct2);
-
-    //       if(ttem != 1)
-    //       {
-    //         i_nex_tem = i_nex_tem2;
-    //         break;
-    //       }
-    //       curr_direct = curr_direct2;
-    //     }
-
-    //     if(j == last_i+1)
-    //     {
-    //       last_state = 0;
-    //     }
-    //     else
-    //     {
-    //       for(uint k=last_i_nex; k<=i_nex_tem; k++)
-    //       {
-    //         if(k != i_nex_tem)
-    //         {
-    //           types[k].ftype = Real_Plane;
-    //         }
-    //         else
-    //         {
-    //           types[k].ftype = Poss_Plane;
-    //         }
-    //       }
-    //       i = i_nex_tem-1;
-    //       i_nex = i_nex_tem;
-    //       i2 = j-1;
-    //       last_state = 1;
-    //     }
-
-    //   }
-    // }
-
-    last_i = i2;
-    last_i_nex = i_nex;
+    
+    last_i = i_next;
+    last_i_next = i_nex;
     last_direct = curr_direct;
   }
 
