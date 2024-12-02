@@ -56,7 +56,7 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl_ros/transforms.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <std_msgs/Bool.h>
+#include <fast_lio/BoolStamped.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
 #include <geometry_msgs/Vector3.h>
@@ -866,11 +866,13 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped, const ros::Publish
     }
     
     if (if_pub_idel_bool){
-        std_msgs::Bool if_idel_msg; 
+        fast_lio::BoolStamped if_idel_msg;
+        if_idel_msg.header.stamp =  ros::Time().fromSec(lidar_end_time);
+        if_idel_msg.header.frame_id = map_frame_name;
         if(time_period_idel_sec > idel_start_sec){
-            if_idel_msg.data = true;
+            if_idel_msg.bool_data = true;
         }else{         
-            if_idel_msg.data = false ;
+            if_idel_msg.bool_data = false ;
         }
     
         if(int(time_curr_sec - time_init_sec)%idel_pub_freq_sec==0 && !if_idel_published ){
@@ -1311,7 +1313,7 @@ int main(int argc, char **argv)
     ros::Publisher pub_corn = nh.advertise<sensor_msgs::PointCloud2>("/cloud_feature_corn", 100000);
     ros::Publisher pub_orig = nh.advertise<sensor_msgs::PointCloud2>("/cloud_orig", 100000);
     ros::Publisher pub_cuboid_8pts =  nh.advertise<sensor_msgs::PointCloud2>("/self_cuboid", 1);
-    pub_idel = nh.advertise<std_msgs::Bool>("/idle_bool", 1);
+    pub_idel = nh.advertise<fast_lio::BoolStamped>("/idle_bool", 1);
     
     // ros::Publisher pubLaserFeaturePoints = nh.advertise<sensor_msgs::PointCloud2>
     //         ("/Laser_feature_points", 100000);

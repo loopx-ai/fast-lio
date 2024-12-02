@@ -43,16 +43,16 @@ find_package(PythonLibs REQUIRED)
 find_path(MATPLOTLIB_CPP_INCLUDE_DIRS "matplotlibcpp.h")
 
 find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  rospy
   geometry_msgs
   nav_msgs
   sensor_msgs
-  roscpp
-  rospy
   std_msgs
-  pcl_ros
   tf
-  livox_ros_driver
   message_generation
+  pcl_ros
+  livox_ros_driver
   eigen_conversions
 )
 
@@ -62,20 +62,23 @@ find_package(PCL 1.8 REQUIRED)
 message(Eigen: ${EIGEN3_INCLUDE_DIR})
 
 include_directories(
-	${catkin_INCLUDE_DIRS} 
+  ${catkin_INCLUDE_DIRS} 
   ${EIGEN3_INCLUDE_DIR}
   ${PCL_INCLUDE_DIRS}
   ${PYTHON_INCLUDE_DIRS}
-  include)
+  include
+)
 
 add_message_files(
   FILES
   Pose6D.msg
+  BoolStamped.msg
 )
 
 generate_messages(
  DEPENDENCIES
  geometry_msgs
+ std_msgs
 )
 
 catkin_package(

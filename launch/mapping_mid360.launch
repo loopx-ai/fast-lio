@@ -15,7 +15,7 @@
   <arg name="using_lidar_dirct"  default="1" /> <!--FRONT 1, REAR 2-->
 
   <arg name="if_pub_idel_bool"   default="true" />
-  <arg name="idel_start_sec"     default="60" />
+  <arg name="idel_start_sec"     default="30" />
   <arg name="idel_pub_freq_sec"  default="3" />
 
   <param name="feature_extract_enable"  type="bool"   value="1" />
