@@ -56,6 +56,7 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl_ros/transforms.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <std_msgs/Bool.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
 #include <geometry_msgs/Vector3.h>
@@ -102,6 +103,7 @@ bool lidar_pushed, flg_first_scan = true, flg_exit = false, flg_EKF_inited;
 bool scan_pub_en = true, dense_pub_en = false, scan_body_pub_en = false;
 string map_frame_name, body_frame_name;
 double max_x, min_x, max_y, min_y, max_z, min_z;
+int idel_start_sec = 10; int idel_pub_freq_sec = 5;
 //std::vector<float> front_lidar_2_base, rear_lidar_2_base;
 std::vector<float> base_2_front_lidar, base_2_rear_lidar;
 tf::Transform *trans_ptr;
@@ -173,8 +175,13 @@ bool if_log_speed_print = true;
 bool if_cropself = true;
 bool if_init_time_sec = false;
 bool if_moving = false;
+
 bool if_start_idel_1 = false;
 bool if_start_idel_2 = false;
+
+bool if_pub_idel_bool = true;
+bool if_idel_published = false;
+ros::Publisher pub_idel;
 
 double time_init_sec;
 double time_curr_sec;
@@ -832,42 +839,58 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped, const ros::Publish
     //std::cout<< time_curr_sec <<"," << time_last_logtag_sec <<"," << frequency_hz_log_speed <<std::endl;
     //std::cout <<"diff * freq =" <<(time_curr_sec - time_last_logtag_sec) * frequency_hz_log_speed <<std::endl;
     if (if_log_speed_print){
-    if ((time_curr_sec - time_last_logtag_sec) * frequency_hz_log_speed > 1.0){
-        ROS_INFO_STREAM("[Mapping][Speed]" <<std::setw(5)<<std::fixed<<std::setprecision(2)<<speed_meter_s << "m/s, "
-                                           <<std::setw(5)<<std::fixed<<std::setprecision(2)<<speed_meter_s * 3.6 << "km/h");
-        time_last_logtag_sec = time_curr_sec;
-    }
+        if ((time_curr_sec - time_last_logtag_sec) * frequency_hz_log_speed > 1.0){
+            ROS_INFO_STREAM("[Mapping][Speed]" <<std::setw(5)<<std::fixed<<std::setprecision(2)<<speed_meter_s << "m/s, "
+                                               <<std::setw(5)<<std::fixed<<std::setprecision(2)<<speed_meter_s * 3.6 << "km/h");
+            time_last_logtag_sec = time_curr_sec;
+        }
     }
 
     if (if_log_idel_print){
-    if(speed_meter_s < 0.8){
-        if (if_moving == 1){
-            if_moving = false;
-            time_idle_start_sec = time_curr_sec;
-        }else{
-            time_period_idel_sec = time_curr_sec - time_idle_start_sec;
+        if(speed_meter_s < 0.8){
+            if (if_moving == 1){
+                if_moving = false;
+                time_idle_start_sec = time_curr_sec;
+            }else{
+                time_period_idel_sec = time_curr_sec - time_idle_start_sec;
+            }
+        }else if (if_moving == false){
+            if_moving = true;
+            if(time_period_idel_sec > 30){
+               ROS_INFO_STREAM("[Mapping][idel_end]"<< "idel time is over, idel time = "<< time_period_idel_sec <<"sec" );
+               if_start_idel_1 = false;
+               if_start_idel_2 = false;
+            }
+            time_period_idel_sec = 0; 
         }
-    }else if (if_moving == false){
-      if_moving = true;
-      if(time_period_idel_sec > 30){
-         ROS_INFO_STREAM("[Mapping][idel_end]"<< "idel time is over, idel time = "<< time_period_idel_sec <<"sec" );
-        if_start_idel_1 = false;
-        if_start_idel_2 = false;
-      }
-      time_period_idel_sec = 0; 
     }
+    
+    if (if_pub_idel_bool){
+        std_msgs::Bool if_idel_msg; 
+        if(time_period_idel_sec > idel_start_sec){
+            if_idel_msg.data = true;
+        }else{         
+            if_idel_msg.data = false ;
+        }
+    
+        if(int(time_curr_sec - time_init_sec)%idel_pub_freq_sec==0 && !if_idel_published ){
+            pub_idel.publish(if_idel_msg);
+            if_idel_published = true;
+        }else if (int(time_curr_sec - time_init_sec)%idel_pub_freq_sec!=0 && if_idel_published){
+            if_idel_published = false;
+        }
     }
 
-    if(int (time_period_idel_sec) == 10 && !if_start_idel_1){
+    if(int (time_period_idel_sec) == idel_start_sec && !if_start_idel_1){
       ROS_INFO_STREAM("[Mapping][idel_start]"<< "idel time = "<< time_period_idel_sec <<"sec" );
       if_start_idel_1 = true;
     }
-    if(int (time_period_idel_sec) == 30 && !if_start_idel_2){
-      ROS_INFO_STREAM("[Mapping][idel_30s]"<< "idel time = "<< time_period_idel_sec <<"sec" );
+    if(int (time_period_idel_sec) == 60 && !if_start_idel_2){
+      ROS_INFO_STREAM("[Mapping][idel_60s]"<< "idel time = "<< time_period_idel_sec <<"sec" );
       if_start_idel_2 = true;
     }
     if(int (time_period_idel_sec > 60 && int(time_period_idel_sec)%60==0 && if_start_idel_2)){
-      ROS_INFO_STREAM("[Mapping][idel_mins]"<< "idel time = "<< time_period_idel_sec <<"sec" );
+      ROS_INFO_STREAM("[Mapping][idel_mins]"<< "idel time = "<< time_period_idel_sec/60 <<" Minutes" );
       if_start_idel_2 = false;
     }
     if( int(time_period_idel_sec)%60==1 && !if_start_idel_2) if_start_idel_2 = true;
@@ -1165,7 +1188,10 @@ int main(int argc, char **argv)
     ROS_INFO_STREAM("[Mapping] if_log_idel_print = " << if_log_idel_print);
     nh.param<double>("log/frequency_hz_log_speed", frequency_hz_log_speed, 3);
 
-
+    nh.param<bool>("if_pub_idel_bool", if_pub_idel_bool, false);
+    nh.param<int>("idel_start_sec", idel_start_sec, 10);
+    nh.param<int>("idel_pub_freq_sec", idel_pub_freq_sec, 10);
+    
     nh.getParam("max_x", max_x);
     nh.getParam("min_x", min_x);
     nh.getParam("max_y", max_y);
@@ -1196,28 +1222,6 @@ int main(int argc, char **argv)
                                      * Eigen::AngleAxisf(base_2_rear_lidar[4], Eigen::Vector3f::UnitY())
                                      * Eigen::AngleAxisf(base_2_rear_lidar[5], Eigen::Vector3f::UnitZ()));
     transform_rear_lidar_2_base.translation() << base_2_rear_lidar[0], base_2_rear_lidar[1] ,base_2_rear_lidar[2]+min_z;
-    //std::cout<<"transform_rear_lidar_2_base"<<std::endl;
-    //std::cout<<transform_rear_lidar_2_base.matrix()<<std::endl;
-
-
-/*
-    Eigen::Affine3f transform_base_2_front_lidar = Eigen::Affine3f::Identity();
-    transform_base_2_front_lidar.translation() << -base_2_front_lidar[0], -base_2_front_lidar[1], -(base_2_front_lidar[2]+min_z);
-    transform_base_2_front_lidar.rotate(Eigen::AngleAxisf(-base_2_front_lidar[3], Eigen::Vector3f::UnitX())
-                                      * Eigen::AngleAxisf(-base_2_front_lidar[4], Eigen::Vector3f::UnitY())
-                                      * Eigen::AngleAxisf(-base_2_front_lidar[5], Eigen::Vector3f::UnitZ()));
-    std::cout<<"transform_base_2_front_lidar"<<std::endl;
-    std::cout<<transform_base_2_front_lidar.matrix()<<std::endl;
-
-    Eigen::Affine3f transform_base_2_rear_lidar = Eigen::Affine3f::Identity();
-    transform_base_2_rear_lidar.translation() << -base_2_rear_lidar[0], -base_2_rear_lidar[1], -(base_2_rear_lidar[2]+min_z);
-    transform_base_2_rear_lidar.rotate(Eigen::AngleAxisf(-base_2_rear_lidar[3], Eigen::Vector3f::UnitX())
-                                     * Eigen::AngleAxisf(-base_2_rear_lidar[4], Eigen::Vector3f::UnitY())
-                                     * Eigen::AngleAxisf(-base_2_rear_lidar[5], Eigen::Vector3f::UnitZ()));
-
-    std::cout<<"transform_base_2_rear_lidar"<<std::endl;
-    std::cout<<transform_base_2_rear_lidar.matrix()<<std::endl;
-*/
 
     ROS_INFO_STREAM("[Mapping] using_lidar_dirct = "<<using_lidar_dirct<<" ");
     switch (using_lidar_dirct){
@@ -1306,9 +1310,9 @@ int main(int argc, char **argv)
     ros::Publisher pub_surf = nh.advertise<sensor_msgs::PointCloud2>("/cloud_feature_surf", 100000);
     ros::Publisher pub_corn = nh.advertise<sensor_msgs::PointCloud2>("/cloud_feature_corn", 100000);
     ros::Publisher pub_orig = nh.advertise<sensor_msgs::PointCloud2>("/cloud_orig", 100000);
-    // = nh.advertise<sensor_msgs::PointCloud2>("/laser_map", 100000);
     ros::Publisher pub_cuboid_8pts =  nh.advertise<sensor_msgs::PointCloud2>("/self_cuboid", 1);
-
+    pub_idel = nh.advertise<std_msgs::Bool>("/idle_bool", 1);
+    
     // ros::Publisher pubLaserFeaturePoints = nh.advertise<sensor_msgs::PointCloud2>
     //         ("/Laser_feature_points", 100000);
     ros::Publisher pubOdomAftMapped = nh.advertise<nav_msgs::Odometry>("/Odometry", 100000);
