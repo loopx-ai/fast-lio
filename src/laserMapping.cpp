@@ -32,6 +32,7 @@
 // CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
+
 #include <omp.h>
 #include <mutex>
 #include <math.h>
@@ -43,10 +44,23 @@
 #include <so3_math.h>
 #include <ros/ros.h>
 #include <Eigen/Core>
-#include "IMU_Processing.hpp"
+
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <livox_ros_driver/CustomMsg.h>
+#include <fast_lio/BoolStamped.h>
+
+#include <tf/transform_datatypes.h>
+#include <tf/transform_broadcaster.h>
+#include <tf2_ros/static_transform_broadcaster.h>
+
+#include <geometry_msgs/Vector3.h>
+#include <geometry_msgs/TwistStamped.h>
+
+#include <jsk_rviz_plugins/OverlayText.h>
 #include <visualization_msgs/Marker.h>
+
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/common/common.h>
 #include <pcl/point_cloud.h>
@@ -55,17 +69,12 @@
 #include <pcl/filters/crop_box.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl_ros/transforms.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <fast_lio/BoolStamped.h>
-#include <tf/transform_datatypes.h>
-#include <tf/transform_broadcaster.h>
-#include <geometry_msgs/Vector3.h>
-#include <geometry_msgs/TwistStamped.h>
-#include <livox_ros_driver/CustomMsg.h>
+
 #include "preprocess.h"
-#include <name_pcd.h>
-#include <ikd-Tree/ikd_Tree.h>
-#include <common_lib.h>
+#include "IMU_Processing.hpp"
+#include "name_pcd.h"
+#include "ikd-Tree/ikd_Tree.h"
+#include "common_lib.h"
 
 #define INIT_TIME (0.1)
 #define LASER_POINT_COV (0.001)
@@ -103,7 +112,10 @@ bool lidar_pushed, flg_first_scan = true, flg_exit = false, flg_EKF_inited;
 bool scan_pub_en = true, dense_pub_en = false, scan_body_pub_en = false;
 string map_frame_name, body_frame_name;
 double max_x, min_x, max_y, min_y, max_z, min_z;
-int idel_start_sec = 10; int idel_pub_freq_sec = 5;
+int idle_start_l1_sec = 10; 
+int idle_start_l2_sec = 30; 
+int idle_pub_freq_sec = 5;
+float speed_meter_s = 0;
 //std::vector<float> front_lidar_2_base, rear_lidar_2_base;
 std::vector<float> base_2_front_lidar, base_2_rear_lidar;
 tf::Transform *trans_ptr;
@@ -117,6 +129,8 @@ vector<BoxPointType> cub_needrm;
 vector<PointVector> Nearest_Points;
 vector<double> extrinT(3, 0.0);
 vector<double> extrinR(9, 0.0);
+vector<double> ext_front_base2lidar(6, 0.0);
+
 deque<double> time_buffer;
 deque<PointCloudXYZI::Ptr> lidar_buffer;
 deque<sensor_msgs::Imu::ConstPtr> imu_buffer;
@@ -143,6 +157,7 @@ pcl::VoxelGrid<PointType> downSizeFilterSurf;
 pcl::VoxelGrid<PointType> downSizeFilterMap;
 
 ros::Publisher pubMarkerText;
+ros::Publisher pubOverlayText;
 
 KD_TREE<PointType> ikdtree;
 
@@ -170,25 +185,26 @@ std::string postfixName;
 std::string folderString_default;
 
 bool if_log_debug_print = false;
-bool if_log_idel_print = true;
+bool if_log_idle_print = true;
 bool if_log_speed_print = true;
 bool if_cropself = true;
 bool if_init_time_sec = false;
 bool if_moving = false;
 
-bool if_start_idel_1 = false;
-bool if_start_idel_2 = false;
+bool if_start_idle_1 = false;
+bool if_start_idle_2 = false;
+bool if_start_idle_mins = false;
 
-bool if_pub_idel_bool = true;
-bool if_idel_published = false;
-ros::Publisher pub_idel;
+bool if_pub_idle_bool = true;
+bool if_idle_published = false;
+ros::Publisher pub_idle;
 
 double time_init_sec;
 double time_curr_sec;
 double time_last_logtag_sec;
 double time_last_idletag_sec;
 double time_idle_start_sec;
-double time_period_idel_sec;
+double time_period_idle_sec;
 double frequency_hz_log_speed = 3.0;
 
 shared_ptr<Preprocess> p_pre(new Preprocess());
@@ -388,9 +404,29 @@ void lasermap_fov_segment()
     kdtree_delete_time = omp_get_wtime() - delete_begin;
 }
 
-void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
+/*
+void base_2_lidar_br(const sensor_msgs::PointCloud2::ConstPtr &msg_in,
+                           sensor_msgs::PointCloud2::ConstPtr &cloud2_out){
+    static tf::TransformBroadcaster br;
+    tf::Transform transform(tf::createQuaternionFromRPY(ext_front_base2lidar[3],ext_front_base2lidar[4],ext_front_base2lidar[5]),
+                                            tf::Vector3(ext_front_base2lidar[0],ext_front_base2lidar[1],ext_front_base2lidar[2]));
+    pcl_ros::transformPointCloud(body_frame_name,transform, *msg_in, *cloud2_out);
+    br.sendTransform(tf::StampedTransform(transform, msg_in->header.stamp, body_frame_name, msg_in->header.frame_id));
+}*/
+
+void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg_in)
 {
     //std::cout << "standard_pcl_cbk" << std::endl;
+
+    static tf::TransformBroadcaster br;
+    
+    tf::Transform transform(tf::createQuaternionFromRPY(ext_front_base2lidar[3],ext_front_base2lidar[4],ext_front_base2lidar[5]),
+                                            tf::Vector3(ext_front_base2lidar[0],ext_front_base2lidar[1],ext_front_base2lidar[2]));
+    //br.sendTransform(tf::StampedTransform(transform, msg_in->header.stamp, body_frame_name, msg_in->header.frame_id));
+    
+    sensor_msgs::PointCloud2::Ptr msg(new sensor_msgs::PointCloud2());
+    pcl_ros::transformPointCloud(body_frame_name,transform, *msg_in,*msg);
+
     if (!if_init_time_sec){
         time_init_sec = msg->header.stamp.toSec();
         if_init_time_sec = true;
@@ -406,9 +442,22 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
         ROS_ERROR("lidar loop back, clear buffer");
         lidar_buffer.clear();
     }
-    PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
+
+    //std::vector<int> index_cropself = CropboxPolygonIndicesHandle(msg, transform_lidar_2_base_ptr);
     p_pre->process(msg, pcl_feature_full, pcl_feature_surf, pcl_feature_corn);
-    lidar_buffer.push_back(ptr);
+    sensor_msgs::PointCloud2 ros_pc_msg_feature_full;
+    sensor_msgs::PointCloud2 ros_pc_msg_feature_surf;
+    sensor_msgs::PointCloud2 ros_pc_msg_feature_corn;
+
+    pcl::toROSMsg(*pcl_feature_full, ros_pc_msg_feature_full);
+    pcl::toROSMsg(*pcl_feature_surf, ros_pc_msg_feature_surf);
+    pcl::toROSMsg(*pcl_feature_corn, ros_pc_msg_feature_corn);
+    
+    std::cout<< "pcl_surface_full.points.size()!= "<< pcl_feature_full->points.size()<<std::endl;
+    std::cout<< "pcl_feature_surf.points.size()!= "<< pcl_feature_surf->points.size()<<std::endl;
+    std::cout<< "pcl_feature_corn.points.size()!= "<< pcl_feature_corn->points.size()<<std::endl;
+    //lidar_buffer.push_back(pcl_feature_full);
+    lidar_buffer.push_back(pcl_feature_full);
     time_buffer.push_back(msg->header.stamp.toSec());
     last_timestamp_lidar = msg->header.stamp.toSec();
     s_plot11[scan_count] = omp_get_wtime() - preprocess_start_time;
@@ -454,7 +503,7 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg){
     sensor_msgs::PointCloud2 ros_pc_msg_feature_corn;
 
     std::vector<int> index_cropself = CropboxPolygonIndicesHandle(msg, transform_lidar_2_base_ptr);
-    p_pre->process(msg, index_cropself, pcl_feature_full, pcl_feature_surf, pcl_feature_corn);
+    p_pre->process(msg, index_cropself,pcl_feature_full, pcl_feature_surf, pcl_feature_corn);
     //pcl::transformPointCloud (*pcl_feature_full, *pcl_feature_full, *transform_lidar_2_base_ptr,false);
     //pcl::transformPointCloud (*pcl_feature_surf, *pcl_feature_surf, *transform_lidar_2_base_ptr,false);
     //pcl::transformPointCloud (*pcl_feature_corn, *pcl_feature_corn, *transform_lidar_2_base_ptr,false);
@@ -508,7 +557,8 @@ double lidar_mean_scantime = 0.0;
 int scan_num = 0;
 bool sync_packages(MeasureGroup &meas)
 {
-    if (lidar_buffer.empty() || imu_buffer.empty())
+    //std::cout<< "lidar_buffer.empty() = " <<lidar_buffer.empty()<< ", imu_buffer.empty() = "<< imu_buffer.empty()<<std::endl;
+   if (lidar_buffer.empty() || imu_buffer.empty())
     {
         return false;
     }
@@ -519,7 +569,7 @@ bool sync_packages(MeasureGroup &meas)
         meas.lidar = lidar_buffer.front();
         meas.lidar_beg_time = time_buffer.front();
         if (meas.lidar->points.size() <= 1) // time too little
-        {
+        { 
             lidar_end_time = meas.lidar_beg_time + lidar_mean_scantime;
             ROS_WARN("Too few input point cloud!\n");
         }
@@ -538,7 +588,7 @@ bool sync_packages(MeasureGroup &meas)
 
         lidar_pushed = true;
     }
-
+    
     if (last_timestamp_imu < lidar_end_time)
     {
         return false;
@@ -618,13 +668,14 @@ void map_incremental()
 
 void publish_cloud(const ros::Publisher &pub, PointCloudXYZI::Ptr pcl_in, std::string frame_id)
 {
-    sensor_msgs::PointCloud2 ros_pc2_msg;
-    pcl::toROSMsg(*pcl_in, ros_pc2_msg);
-    ros_pc2_msg.header.stamp = ros::Time().fromSec(lidar_end_time);
-    ros_pc2_msg.header.frame_id = frame_id;
-    pub.publish(ros_pc2_msg);
+    if (pub.getNumSubscribers() >0){
+        sensor_msgs::PointCloud2 ros_pc2_msg;
+        pcl::toROSMsg(*pcl_in, ros_pc2_msg);
+        ros_pc2_msg.header.stamp = ros::Time().fromSec(lidar_end_time);
+        ros_pc2_msg.header.frame_id = frame_id;
+        pub.publish(ros_pc2_msg);
+    }
 }
-
 PointCloudXYZI::Ptr pcl_wait_pub(new PointCloudXYZI(500000, 1));
 PointCloudXYZI::Ptr pcl_wait_save(new PointCloudXYZI());
 
@@ -663,9 +714,10 @@ void updateTimeName(ros::Time ros_time_in)
         ROS_INFO_STREAM("[Mapping][pcd name] timeString = " << buffer);
     }
 }
+
 void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
 {
-    if (scan_pub_en)
+    if (scan_pub_en && pubLaserCloudFull.getNumSubscribers()>0)
     {
         PointCloudXYZI::Ptr laserCloudFullRes(dense_pub_en ? feats_undistort : feats_down_body);
         int size = laserCloudFullRes->points.size();
@@ -683,7 +735,7 @@ void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
         laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
         laserCloudmsg.header.frame_id = map_frame_name;
         pubLaserCloudFull.publish(laserCloudmsg);
-        // std::cout<<"laserCloudWorld = "<< laserCloudWorld->points.size()<<std::endl;
+        //std::cout<<"laserCloudWorld = "<< laserCloudWorld->points.size()<<std::endl;
         publish_count -= PUBFRAME_PERIOD;
     }
 
@@ -727,10 +779,12 @@ void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
 
 void publish_effect_world(const ros::Publisher &pubLaserCloudEffect)
 {
+    if (pubLaserCloudEffect.getNumSubscribers()==0){
+        return;
+    }
     PointCloudXYZI::Ptr laserCloudWorld(
         new PointCloudXYZI(effct_feat_num, 1));
-    for (int i = 0; i < effct_feat_num; i++)
-    {
+    for (int i = 0; i < effct_feat_num; i++){
         RGBpointBodyToWorld(&laserCloudOri->points[i],
                             &laserCloudWorld->points[i]);
     }
@@ -804,8 +858,8 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped, const ros::Publish
     q.setY(odomAftMapped.pose.pose.orientation.y);
     q.setZ(odomAftMapped.pose.pose.orientation.z);
     transform.setRotation(q);
-    br.sendTransform(tf::StampedTransform(transform, odomAftMapped.header.stamp, map_frame_name, body_frame_name));
-
+    //br.sendTransform(tf::StampedTransform(transform, odomAftMapped.header.stamp, map_frame_name, body_frame_name));
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), map_frame_name, body_frame_name));
     // Publish Twist on base_link frame
     geometry_msgs::TwistStamped twist;
     twist.header.stamp = odomAftMapped.header.stamp;
@@ -832,7 +886,7 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped, const ros::Publish
     if (if_log_debug_print){
         ROS_INFO_STREAM("[Mapping][Twist]yaw(degree):" << yaw * 180.0 / M_PI << " vel_vector_angle: " << vel_vector_angle << " diff: " << diff << " twist: " << twist.twist.linear.x);
     }
-    float speed_meter_s = sqrt(twist.twist.linear.x * twist.twist.linear.x +
+    speed_meter_s = sqrt(twist.twist.linear.x * twist.twist.linear.x +
                                twist.twist.linear.y * twist.twist.linear.y +
                                twist.twist.linear.z * twist.twist.linear.z);
 
@@ -846,56 +900,56 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped, const ros::Publish
         }
     }
 
-    if (if_log_idel_print){
+    if (if_log_idle_print){
         if(speed_meter_s < 0.8){
             if (if_moving == 1){
                 if_moving = false;
                 time_idle_start_sec = time_curr_sec;
             }else{
-                time_period_idel_sec = time_curr_sec - time_idle_start_sec;
+                time_period_idle_sec = time_curr_sec - time_idle_start_sec;
             }
         }else if (if_moving == false){
             if_moving = true;
-            if(time_period_idel_sec > 30){
-               ROS_INFO_STREAM("[Mapping][idel_end]"<< "idel time is over, idel time = "<< time_period_idel_sec <<"sec" );
-               if_start_idel_1 = false;
-               if_start_idel_2 = false;
+            if(time_period_idle_sec > 30){
+               ROS_INFO_STREAM("[Mapping][idle_end]"<< "idle time is over, idle time = "<< time_period_idle_sec <<"sec" );
+               if_start_idle_1 = false;
+               if_start_idle_2 = false;
+               if_start_idle_mins = false;
             }
-            time_period_idel_sec = 0; 
+            time_period_idle_sec = 0; 
         }
     }
     
-    if (if_pub_idel_bool){
-        fast_lio::BoolStamped if_idel_msg;
-        if_idel_msg.header.stamp =  ros::Time().fromSec(lidar_end_time);
-        if_idel_msg.header.frame_id = map_frame_name;
-        if(time_period_idel_sec > idel_start_sec){
-            if_idel_msg.bool_data = true;
+    if (if_pub_idle_bool){
+        fast_lio::BoolStamped if_idle_msg;
+        if_idle_msg.header.stamp =  ros::Time().fromSec(lidar_end_time);
+        if_idle_msg.header.frame_id = map_frame_name;
+        if(time_period_idle_sec > idle_start_l1_sec){
+            if_idle_msg.bool_data = true;
         }else{         
-            if_idel_msg.bool_data = false ;
+            if_idle_msg.bool_data = false ;
         }
     
-        if(int(time_curr_sec - time_init_sec)%idel_pub_freq_sec==0 && !if_idel_published ){
-            pub_idel.publish(if_idel_msg);
-            if_idel_published = true;
-        }else if (int(time_curr_sec - time_init_sec)%idel_pub_freq_sec!=0 && if_idel_published){
-            if_idel_published = false;
+        if(int(time_curr_sec - time_init_sec)%idle_pub_freq_sec==0 && !if_idle_published ){
+            pub_idle.publish(if_idle_msg);
+            if_idle_published = true;
+        }else if (int(time_curr_sec - time_init_sec)%idle_pub_freq_sec!=0 && if_idle_published){
+            if_idle_published = false;
         }
     }
 
-    if(int (time_period_idel_sec) == idel_start_sec && !if_start_idel_1){
-      ROS_INFO_STREAM("[Mapping][idel_start]"<< "idel time = "<< time_period_idel_sec <<"sec" );
-      if_start_idel_1 = true;
+    if(int (time_period_idle_sec) == idle_start_l1_sec && !if_start_idle_1){
+        ROS_INFO_STREAM("[Mapping][idle_start]"<< "idle time = "<<std::fixed<<std::setprecision(2)<< time_period_idle_sec <<"sec" );
+        if_start_idle_1 = true;
     }
-    if(int (time_period_idel_sec) == 60 && !if_start_idel_2){
-      ROS_INFO_STREAM("[Mapping][idel_60s]"<< "idel time = "<< time_period_idel_sec <<"sec" );
-      if_start_idel_2 = true;
+    if(int (time_period_idle_sec) == idle_start_l2_sec && !if_start_idle_2){
+        ROS_INFO_STREAM("[Mapping][idle_2l]"<< "idle time = "<<std::fixed<<std::setprecision(2)<< time_period_idle_sec <<"sec" );
+        if_start_idle_2 = true;
     }
-    if(int (time_period_idel_sec > 60 && int(time_period_idel_sec)%60==0 && if_start_idel_2)){
-      ROS_INFO_STREAM("[Mapping][idel_mins]"<< "idel time = "<< time_period_idel_sec/60 <<" Minutes" );
-      if_start_idel_2 = false;
+    if(int (time_period_idle_sec > 60 && int(time_period_idle_sec)%60==0 && if_start_idle_mins)){
+        ROS_INFO_STREAM("[Mapping][idle_mins]"<< "idle time = "<<std::fixed<<std::setprecision(2)<< time_period_idle_sec/60 <<" Minutes" );
+        if_start_idle_mins = false;
     }
-    if( int(time_period_idel_sec)%60==1 && !if_start_idel_2) if_start_idel_2 = true;
 
     // tf::Vector3 twist_rot(odomAftMapped.twist.twist.angular.x,
     //                       odomAftMapped.twist.twist.angular.y,
@@ -917,8 +971,63 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped, const ros::Publish
     pubTwist.publish(twist);
 }
 
+void pubJskOverlay(geometry_msgs::PoseStamped pose_in)
+{
+    if(pubOverlayText.getNumSubscribers()==0){return;}
+    std::ostringstream tostr;
+    if(if_moving){
+    // variable for text view facing marker
+    /*std::cout<< std::setfill(' ')
+          << std::setw(8) << "x:" <<std::setw(8) << std::fixed << std::setprecision(2) << pose_in.pose.position.x << "\n"
+          << std::setw(8) << "y:" <<std::setw(8) << std::fixed << std::setprecision(2) << pose_in.pose.position.y << "\n"
+          << std::setw(8) << "z:"  <<std::setw(8) << std::fixed << std::setprecision(2) << pose_in.pose.position.z << "\n"
+          << std::setw(8) << "Speed:" << std::right <<std::setw(8) << std::fixed << std::setprecision(2) << speed_meter_s * 3.6 << "km/h" << std::endl;*/
+          tostr << std::setfill(' ')
+          << std::setw(8) << "x:" <<std::setw(8) << std::fixed << std::setprecision(2) << pose_in.pose.position.x <<"\n"
+          << std::setw(8) << "y:" <<std::setw(8) << std::fixed << std::setprecision(2) << pose_in.pose.position.y <<"\n"
+          << std::setw(8) << "z:"  <<std::setw(8) << std::fixed << std::setprecision(2) << pose_in.pose.position.z <<"\n"
+          << std::setw(8) << "Speed:" << std::right <<std::setw(8) << std::fixed << std::setprecision(2) << speed_meter_s * 3.6 <<" km/h" << std::endl;
+    }else if (time_period_idle_sec>idle_start_l1_sec){
+        if(time_period_idle_sec<60){
+          tostr << std::setfill(' ')
+          << std::setw(8) << "idle time:"<<std::setw(8) << std::fixed << std::setprecision(0) <<time_period_idle_sec<<" sec"<<"\n";
+        }
+        if(time_period_idle_sec>60 && time_period_idle_sec<120){
+             tostr << std::setfill(' ')
+             << std::setw(8) << "idle time: \n" <<std::setw(8) << std::fixed << std::setprecision(0) <<" 1 min & "<< int(time_period_idle_sec)%60<<" sec"<<"\n";
+        }
+        if(time_period_idle_sec>=120 && time_period_idle_sec < 36000){
+            tostr << std::setfill(' ')
+             << std::setw(8) << "idle time: \n" <<std::setw(8) << std::fixed << std::setprecision(0) << time_period_idle_sec/60 <<" mins & "<< int(time_period_idle_sec)%60<<" sec"<<"\n";
+        }
+        if(time_period_idle_sec>=3600 && time_period_idle_sec < 86400){
+            tostr << std::setfill(' ')
+             << std::setw(8) << "idle time: \n" <<std::setw(8) << std::fixed << std::setprecision(0) <<time_period_idle_sec/3600<<" hr & "<<int(int(time_period_idle_sec)%3600)%60<<"  min & "<< int(time_period_idle_sec)%60<<" sec"<<"\n";
+        }
+    }
+
+    std::string txt_o = tostr.str();
+    //std::cout<< "pubJskOverlay :"<<txt_o<<std::endl;
+    jsk_rviz_plugins::OverlayText overlay_txt;
+    overlay_txt.text   = txt_o;
+    overlay_txt.width  = 400;
+    overlay_txt.height = 600;
+    overlay_txt.left   = 100;
+    overlay_txt.top    = 100;
+    overlay_txt.text_size = 20;
+    overlay_txt.line_width = 3;
+    overlay_txt.font = "DejaVu Sans Mono";
+ 
+    std_msgs::ColorRGBA fg; fg.a = 236/255; fg.b = 245/255; fg.g = 39/255.0; fg.r=0.8;
+    overlay_txt.fg_color = fg;
+    std_msgs::ColorRGBA bg; fg.a = 0.0;     fg.b = 0.0;     fg.g = 0.0;      fg.r=0.2;
+    overlay_txt.bg_color = bg;
+    pubOverlayText.publish(overlay_txt);
+}
+
 void pubMarker(geometry_msgs::PoseStamped pose_in)
 {
+    if (pubMarkerText.getNumSubscribers()==0){return;}
     std::ostringstream tostr;
     // variable for text view facing marker
     tostr << "x:" << pose_in.pose.position.x << ", y:" << pose_in.pose.position.y << ", z:" << pose_in.pose.position.z << std::endl;
@@ -941,10 +1050,21 @@ void pubMarker(geometry_msgs::PoseStamped pose_in)
     text_view.color.b = 0.0f;
     text_view.color.a = 1.0f;
     pubMarkerText.publish(text_view);
+
+/*
+    visualization_msgs::Marker model_marker;
+    model_marker.type = visualization_msgs::Marker::MESH_RESOURCE;
+    model_marker.mesh_resource = "package://fast_lio/meshes/r1600.dae";
+    model_marker.header.stamp = ros::Time().fromSec(lidar_end_time);
+    model_marker.header.frame_id = body_frame_name;
+
+    pubMarkerText.publish(model_marker);
+    */
 }
 
 void publish_path(const ros::Publisher pubPath)
 {
+    if (pubPath.getNumSubscribers()==0){return;}
     set_posestamp(msg_body_pose);
     msg_body_pose.header.stamp = ros::Time().fromSec(lidar_end_time);
     msg_body_pose.header.frame_id = map_frame_name;
@@ -957,6 +1077,7 @@ void publish_path(const ros::Publisher pubPath)
         path.poses.push_back(msg_body_pose);
         pubPath.publish(path);
         pubMarker(msg_body_pose);
+        pubJskOverlay(msg_body_pose);
     }
 }
 
@@ -1119,7 +1240,6 @@ void set_self_cuboid(){
 void set_nocrop(){
    max_x =  0.01; max_y =  0.01; max_z =  0.01;
    min_x = -0.01; min_y = -0.01; min_z = -0.01;
-
 }
 
 int main(int argc, char **argv)
@@ -1156,8 +1276,9 @@ int main(int argc, char **argv)
     nh.param<bool>  ("mapping/extrinsic_est_en", extrinsic_est_en, true);
     nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
     nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
+    nh.param<vector<double>>("sensorkit/front/ext_base2lidar", ext_front_base2lidar, vector<double>());
 
-    nh.param<double>("preprocess/blind", p_pre->blind, 0.01);
+    nh.param<double>("preprocess/blind", p_pre->blind, 0.1);
     nh.param<int>   ("preprocess/lidar_type", p_pre->lidar_type, AVIA);
     nh.param<int>   ("preprocess/scan_line", p_pre->N_SCANS, 16);
     nh.param<int>   ("preprocess/timestamp_unit", p_pre->time_unit, US);
@@ -1186,13 +1307,14 @@ int main(int argc, char **argv)
     p_pre->set_if_log_debug_print(if_log_debug_print);
     nh.param<bool>("log/if_log_speed_print", if_log_speed_print, true);
     ROS_INFO_STREAM("[Mapping] if_log_speed_print = " << if_log_speed_print);
-    nh.param<bool>("log/if_log_idel_print", if_log_idel_print, true);
-    ROS_INFO_STREAM("[Mapping] if_log_idel_print = " << if_log_idel_print);
+    nh.param<bool>("log/if_log_idle_print", if_log_idle_print, true);
+    ROS_INFO_STREAM("[Mapping] if_log_idle_print = " << if_log_idle_print);
     nh.param<double>("log/frequency_hz_log_speed", frequency_hz_log_speed, 3);
 
-    nh.param<bool>("if_pub_idel_bool", if_pub_idel_bool, false);
-    nh.param<int>("idel_start_sec", idel_start_sec, 10);
-    nh.param<int>("idel_pub_freq_sec", idel_pub_freq_sec, 10);
+    nh.param<bool>("if_pub_idle_bool", if_pub_idle_bool, false);
+    nh.param<int>("idle_start_l1_sec", idle_start_l1_sec, 10);
+    nh.param<int>("idle_start_l2_sec", idle_start_l2_sec, 30);
+    nh.param<int>("idle_pub_freq_sec", idle_pub_freq_sec, 10);
     
     nh.getParam("max_x", max_x);
     nh.getParam("min_x", min_x);
@@ -1253,9 +1375,9 @@ int main(int argc, char **argv)
     // pcl::io::savePCDFileASCII("/home/loopx/rosbag/trans_8pts.pcd", *pcl_cuboid_8pts_lidar_frame);
     
     cout << "p_pre->lidar_type " << p_pre->lidar_type << endl;
+    cout << "p_pre->blind " << p_pre->blind << endl;
     cout << "lid_topic = " << lid_topic << endl;
     
-
     path.header.stamp = ros::Time::now();
     path.header.frame_id = map_frame_name;
 
@@ -1313,7 +1435,7 @@ int main(int argc, char **argv)
     ros::Publisher pub_corn = nh.advertise<sensor_msgs::PointCloud2>("/cloud_feature_corn", 100000);
     ros::Publisher pub_orig = nh.advertise<sensor_msgs::PointCloud2>("/cloud_orig", 100000);
     ros::Publisher pub_cuboid_8pts =  nh.advertise<sensor_msgs::PointCloud2>("/self_cuboid", 1);
-    pub_idel = nh.advertise<fast_lio::BoolStamped>("/idle_bool", 1);
+    pub_idle = nh.advertise<fast_lio::BoolStamped>("/idle_bool", 1);
     
     // ros::Publisher pubLaserFeaturePoints = nh.advertise<sensor_msgs::PointCloud2>
     //         ("/Laser_feature_points", 100000);
@@ -1322,7 +1444,7 @@ int main(int argc, char **argv)
     // publish twist
     ros::Publisher pubTwist = nh.advertise<geometry_msgs::TwistStamped>("/twist", 100000);
     pubMarkerText = nh.advertise<visualization_msgs::Marker>("visualization_markers_text", 5);
-
+    pubOverlayText = nh.advertise<jsk_rviz_plugins::OverlayText>("jsk_text",5);
     //------------------------------------------------------------------------------------------------------
     signal(SIGINT, SigHandle);
     ros::Rate rate(5000);
@@ -1334,6 +1456,7 @@ int main(int argc, char **argv)
         if (flg_exit)
             break;
         ros::spinOnce();
+        //std::cout<<"sync_packages(Measures) = "<<sync_packages(Measures)<<"~~"<<std::endl;
         if (sync_packages(Measures))
         {
             if (flg_first_scan)
@@ -1354,12 +1477,24 @@ int main(int argc, char **argv)
             t0 = omp_get_wtime();
 
             p_imu->Process(Measures, kf, feats_undistort);
+            /*feats_undistort = pcl_feature_full;
+            updateTimeName(ros::Time().fromSec(lidar_end_time));
+            if(feats_undistort->points.size()>0){
+                feats_undistort->height =1;
+                feats_undistort->width  =feats_undistort->points.size() ;
+                try {
+                    pcl::io::savePCDFileASCII(fullFileName(savePcdPath), *feats_undistort);
+                    ROS_INFO_STREAM( "[Mapping][feats_undistort]current scan saved to " << fullFileName(savePcdPath)<<"." );
+                }catch(std::exception &e){
+                    pcl::io::savePCDFileASCII( folderString_default+ "/" +  FileNameExt(savePcdPath), *feats_undistort);
+                }
+            }*/
             state_point = kf.get_x();
             pos_lid = state_point.pos + state_point.rot * state_point.offset_T_L_I;
 
             if (feats_undistort->empty() || (feats_undistort == NULL))
             {
-                ROS_WARN("No point, skip this scan!\n");
+                ROS_WARN("No point, skip this scan!!\n");
                 continue;
             }
 
@@ -1391,7 +1526,7 @@ int main(int argc, char **argv)
             int featsFromMapNum = ikdtree.validnum();
             kdtree_size_st = ikdtree.size();
             //std::cout<<"ikdtree.size() = "<<ikdtree.size()<<std::endl;
-            // cout<<"[ mapping ]: In num: "<<feats_undistort->points.size()<<" downsamp "<<feats_down_size<<" Map num: "<<featsFromMapNum<<"effect num:"<<effct_feat_num<<endl;
+            //cout<<"[ mapping ]: In num: "<<feats_undistort->points.size()<<" downsamp "<<feats_down_size<<" Map num: "<<featsFromMapNum<<"effect num:"<<effct_feat_num<<endl;
 
             /*** ICP and iterated Kalman filter update ***/
             if (feats_down_size < 5)
@@ -1469,7 +1604,7 @@ int main(int argc, char **argv)
                    pcl_cuboid_8pts_fit->points[i].y= pcl_cuboid_8pts->points[i].y;
                    pcl_cuboid_8pts_fit->points[i].z= pcl_cuboid_8pts->points[i].z;
                 }
-                publish_cloud(pub_cuboid_8pts, pcl_cuboid_8pts_fit, body_frame_name);
+                //publish_cloud(pub_cuboid_8pts, pcl_cuboid_8pts_fit, body_frame_name);
             }
             if (pub_orig.getNumSubscribers()!= 0){
                 sensor_msgs::PointCloud2 ros_pc2_msg;

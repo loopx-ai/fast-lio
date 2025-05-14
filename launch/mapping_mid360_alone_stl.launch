@@ -2,9 +2,12 @@
 <launch>
   <!-- Launch file for Livox AVIA LiDAR -->
   <arg name="rviz" default="true" />
-  <!--<arg name="config_file" default="$(find fast_lio)/config/mid360.yaml" />-->
-  <arg name="config_file" value="$(find clair_alert)/config/fast_lio.yaml" />
+  <!--arg name="config_file" default="$(find fast_lio)/config/avia.yaml" />-->
+  <arg name="config_file" default="$(find fast_lio)/config/mid360.yaml" />
+  <!--<arg name="config_file" value="$(find clair_alert)/config/fast_lio.yaml" />-->
   <rosparam command="load" file="$(arg config_file)" />
+  <!--<rosparam file="$(find clair_alert)/config/config_airy_rokion.yaml" command="load"/>-->
+  <!--<rosparam file="$(find clair_alert)/config/config_r1700.yaml" command="load"/>-->
   <rosparam file="$(find clair_alert)/config/config_toyota.yaml" command="load"/>
 
   <arg name="if_log_debug_print" default="false" />
@@ -33,11 +36,11 @@
 
   <param name="mapping/det_range"      type="double" value="500" />
 
-  <param name="pcd_save/pcd_save_en"   type="bool" value="1" />
+  <param name="pcd_save/pcd_save_en"   type="bool" value="0" />
   <param name="pcd_save/interval"      type="int" value="1" />
   <param name="pcd_save/folderString"  type="string" value="$(arg pcd_folder)" />
 
-  <param name="preprocess/lidar_type"  type="int" value="1" />'
+  <!--<param name="preprocess/lidar_type"  type="int"  value="1" />'-->
   <param name="preprocess/if_cropself" type="bool" value="$(arg if_cropself)" />
 
   <param name="log/if_log_debug_print" type="bool" value="$(arg if_log_debug_print)" />
@@ -50,8 +53,10 @@
   <param name="if_pub_idel_bool"  type="bool"   value="$(arg if_pub_idel_bool)" />
   <param name="idel_start_sec"    type="int"    value="$(arg idel_start_sec)" />
   <param name="idel_pub_freq_sec" type="int"    value="$(arg idel_pub_freq_sec)" />
-  <param name="common/lid_topic"  type="string" value="/sensing/front/livox/lidar" />
-  <param name="common/imu_topic"  type="string" value="/sensing/front/livox/imu" />
+  <!--<param name="common/lid_topic"  type="string" value="/sensing/front/livox/lidar" />
+      <param name="common/imu_topic"  type="string" value="/sensing/front/livox/imu" />-->
+  <!--<param name="common/lid_topic"  type="string" value="/livox/lidar" />
+      <param name="common/imu_topic"  type="string" value="/livox/imu" />-->
 
   <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" respawn="true">
     <!--<remap from="$(arg livox_lidar_topic)" to="$(arg livox_lidar_topic)"/>-->
@@ -67,66 +72,14 @@
     <remap from="rear_lidar_base2lidar"  to="/sensorkit/rear/ext_base2lidar" />
   </node>
 
-  <!-- <arg name="front_lidar_frame" default="livox_front" />
-  <arg name="front_imu_frame"   default="livox_front" />
-  <arg name="rear_lidar_frame"  default="livox_rear" />
-  <arg name="rear_imu_frame"    default="livox_rear" />
+ <!--<node pkg="tf" type="static_transform_publisher" name="lidar_2_base_broadcaster" 
+       args="0 0 2  -1.6705 -1.045 -1.4844 base_link livox_front 100" /> -->
+
+  <!-- Machine Model and TF -->
+  <include file="$(find toyota_model)/launch/display.launch">
+  <!--<include file="$(find loader_r3000)/launch/display_norviz.launch">-->
+  </include>
   
-
-  <arg name="input/lidar0"      default="livox/lidar"/>
-  <arg name="base_frame"        default="base_link" />
-  <arg name="lidar_frame"       value="$(arg front_lidar_frame)" />
-
-  <group ns="sensing">
-    <group ns="front">
-
-      <node pkg="livox_to_points" type="livox_to_points_node" name="livox_to_points_node"
-        output="screen">
-        <remap from="/livox/lidar" to="$(arg input/lidar0)" />
-        <remap from="/livox/points" to="livox/points"/>
-      </node> 
-
-      <node pkg="imu_complementary_filter" type="complementary_filter_node"
-        name="complementary_filter_gain_node" output="screen">
-        <remap from="imu/data_raw" to="livox/imu" />
-        <remap from="imu/data" to="imu/imu_data" />
-        <param name="acc_g_unit" value="true" />
-        <param name="do_bias_estimation" value="true" />
-        <param name="do_adaptive_gain" value="true" />
-        <param name="use_mag" value="false" />
-        <param name="gain_acc" value="0.004" />
-        <param name="gain_mag" value="0.01" />
-        <param name="bias_alpha" value="0.01" />
-        <param name="publish_debug_topics" value="false" />
-        <param name="publish_tf" value="false" />
-      </node>
-    </group>  -->
-
-<!--    <group ns="rear">
-      <node pkg="livox_to_points" type="livox_to_points_node" name="livox_to_points_node"
-        output="screen">
-        <remap from="/livox/lidar" to="$(arg input/lidar0)"/>
-        <remap from="/livox/points" to="livox/points" />
-      </node>
-
-
-      <node pkg="imu_complementary_filter" type="complementary_filter_node"
-        name="complementary_filter_gain_node" output="screen">
-        <remap from="imu/data_raw" to="livox/imu" />
-        <remap from="imu/data" to="imu/imu_data" />
-        <param name="acc_g_unit" value="true" />
-        <param name="do_bias_estimation" value="true" />
-        <param name="do_adaptive_gain" value="true" />
-        <param name="use_mag" value="false" />
-        <param name="gain_acc" value="0.004" />
-        <param name="gain_mag" value="0.01" />
-        <param name="bias_alpha" value="0.01" />
-        <param name="publish_debug_topics" value="false" />
-        <param name="publish_tf" value="false" />
-      </node>
-    </group>
-  </group>-->
-
   <group if="$(arg rviz)">
     <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz"
       args="-d $(find fast_lio)/rviz_cfg/loam_livox_.rviz">

@@ -50,10 +50,14 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   std_msgs
   tf
+  tf2_ros
   message_generation
+  message_filters
   pcl_ros
   livox_ros_driver
   eigen_conversions
+  #jsk_visualization
+  jsk_rviz_plugins
 )
 
 find_package(Eigen3 REQUIRED)

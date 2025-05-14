@@ -201,8 +201,8 @@ void ImuProcess::IMU_init(const MeasureGroup &meas, esekfom::esekf<state_ikfom, 
 
   esekfom::esekf<state_ikfom, 12, input_ikfom>::cov init_P = kf_state.get_P();
   init_P.setIdentity();
-  init_P(6,6) = init_P(7,7) = init_P(8,8) = 0.00001;
-  init_P(9,9) = init_P(10,10) = init_P(11,11) = 0.00001;
+  init_P( 6, 6) = init_P( 7, 7) = init_P( 8, 8) = 0.00001;
+  init_P( 9, 9) = init_P(10,10) = init_P(11,11) = 0.00001;
   init_P(15,15) = init_P(16,16) = init_P(17,17) = 0.0001;
   init_P(18,18) = init_P(19,19) = init_P(20,20) = 0.001;
   init_P(21,21) = init_P(22,22) = 0.00001; 

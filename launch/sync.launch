@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+
+<node pkg="fast_lio" type="sync_imu_lidar" name="sync_imu_lidar" output="screen" respawn="true">
+  <param name="use_sim_time"     type="bool"     value="true" /> 
+  <param name="lidar_topic_in"   type="string"   value="/sensing/front/livox/lidar" />
+  <param name="imu_topic_in"     type="string"   value="/sensing/front/livox/imu" />
+</node>
+
+</launch>
