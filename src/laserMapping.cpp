@@ -69,6 +69,7 @@
 #include <common_lib.h>
 #include <jsk_rviz_plugins/OverlayText.h>
 #include "obb.h"
+#include <swri_profiler/profiler.h>
 
 #define INIT_TIME (0.1)
 #define LASER_POINT_COV (0.001)
@@ -346,6 +347,7 @@ BoxPointType LocalMap_Points;
 bool Localmap_Initialized = false;
 void lasermap_fov_segment()
 {
+    SWRI_PROFILE("lasermap_fov_segment");
     cub_needrm.clear();
     kdtree_delete_counter = 0;
     kdtree_delete_time = 0.0;
@@ -613,6 +615,8 @@ bool sync_packages(MeasureGroup &meas)
 int process_increments = 0;
 void map_incremental()
 {
+    SWRI_PROFILE("map_incremental()");
+    
     PointVector PointToAdd;
     PointVector PointNoNeedDownsample;
     PointToAdd.reserve(feats_down_size);
@@ -1075,6 +1079,8 @@ void publish_path(const ros::Publisher pubPath)
 
 void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_data)
 {
+
+    SWRI_PROFILE("h_share_model");
     double match_start = omp_get_wtime();
     laserCloudOri->clear();
     corr_normvect->clear();
@@ -1497,20 +1503,28 @@ int main(int argc, char **argv)
 
             /***** Adaptive filter size*****/
             if(enable_adaptive_filter_size){
-               downSizeFilterForObb.setLeafSize(1, 1, 1);
+               downSizeFilterForObb.setLeafSize(1.5, 1.5, 1.5);
                downSizeFilterForObb.setInputCloud(feats_undistort);
                downSizeFilterForObb.filter(*feats_down_body);
                calulate_obb(feats_down_body,&obb_data);
 
                if (obb_data.length_x*obb_data.width_y*obb_data.hight_z>10000){
                    filter_size_surf_min = 0.6;
+                   filter_size_map_min =0.6;
+                   p_pre->point_filter_num = 3;
                }else{
                    filter_size_surf_min = 0.3;
+                   filter_size_map_min = 0.3;
+                   p_pre->point_filter_num = 2;
                }
             }
+
+            downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min, filter_size_surf_min);
+            downSizeFilterMap.setLeafSize(filter_size_map_min, filter_size_map_min, filter_size_map_min);
+
             /*** downsample the feature points in a scan ***/
             //std::cout<<obb_data.length_x<<"*"<<obb_data.width_y<<"*"<<obb_data.hight_z<<", "<<filter_size_surf_min<<std::endl;
-            downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min, filter_size_surf_min);
+            //downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min, filter_size_surf_min);
             downSizeFilterSurf.setInputCloud(feats_undistort);
             //downSizeFilterSurf.setInputCloud(pcl_feature_full);
             downSizeFilterSurf.filter(*feats_down_body);
@@ -1647,8 +1661,8 @@ int main(int argc, char **argv)
                 s_plot9[time_log_counter] = aver_time_consu;
                 s_plot10[time_log_counter] = add_point_size;
                 time_log_counter++;
-                /*
-                printf("[mapping]time: IMU + Map + Input Downsample: %0.6f ave match: %0.6f ave solve: %0.6f  ave ICP: %0.6f  map incre: %0.6f ave total: %0.6f icp: %0.6f construct H: %0.6f \n", t1 - t0, aver_time_match, aver_time_solve, t3 - t1, t5 - t3, aver_time_consu, aver_time_icp, aver_time_const_H_time);
+                
+                /*printf("[mapping]time: IMU + Map + Input Downsample: %0.6f ave match: %0.6f ave solve: %0.6f  ave ICP: %0.6f  map incre: %0.6f ave total: %0.6f icp: %0.6f construct H: %0.6f \n", t1 - t0, aver_time_match, aver_time_solve, t3 - t1, t5 - t3, aver_time_consu, aver_time_icp, aver_time_const_H_time);
                 ext_euler = SO3ToEuler(state_point.offset_R_L_I);
                 fout_out << setw(20) << Measures.lidar_beg_time - first_lidar_time << " " << euler_cur.transpose() << " " << state_point.pos.transpose() << " " << ext_euler.transpose() << " " << state_point.offset_T_L_I.transpose() << " " << state_point.vel.transpose()
                          << " " << state_point.bg.transpose() << " " << state_point.ba.transpose() << " " << state_point.grav << " " << feats_undistort->points.size() << endl;
