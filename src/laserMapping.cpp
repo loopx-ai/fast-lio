@@ -32,7 +32,6 @@
 // CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
-
 #include <omp.h>
 #include <mutex>
 #include <math.h>
@@ -44,23 +43,10 @@
 #include <so3_math.h>
 #include <ros/ros.h>
 #include <Eigen/Core>
-
+#include "IMU_Processing.hpp"
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <livox_ros_driver/CustomMsg.h>
-#include <fast_lio/BoolStamped.h>
-
-#include <tf/transform_datatypes.h>
-#include <tf/transform_broadcaster.h>
-#include <tf2_ros/static_transform_broadcaster.h>
-
-#include <geometry_msgs/Vector3.h>
-#include <geometry_msgs/TwistStamped.h>
-
-#include <jsk_rviz_plugins/OverlayText.h>
 #include <visualization_msgs/Marker.h>
-
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/common/common.h>
 #include <pcl/point_cloud.h>
@@ -69,12 +55,20 @@
 #include <pcl/filters/crop_box.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl_ros/transforms.h>
-
+#include <sensor_msgs/PointCloud2.h>
+#include <fast_lio/BoolStamped.h>
+#include <tf/transform_datatypes.h>
+#include <tf/transform_broadcaster.h>
+#include <tf2_ros/static_transform_broadcaster.h>
+#include <geometry_msgs/Vector3.h>
+#include <geometry_msgs/TwistStamped.h>
+#include <livox_ros_driver/CustomMsg.h>
 #include "preprocess.h"
-#include "IMU_Processing.hpp"
-#include "name_pcd.h"
-#include "ikd-Tree/ikd_Tree.h"
-#include "common_lib.h"
+#include <name_pcd.h>
+#include <ikd-Tree/ikd_Tree.h>
+#include <common_lib.h>
+#include <jsk_rviz_plugins/OverlayText.h>
+#include "obb.h"
 
 #define INIT_TIME (0.1)
 #define LASER_POINT_COV (0.001)
@@ -155,6 +149,9 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_orig_ptr(new pcl::PointCloud<pcl::Poi
 
 pcl::VoxelGrid<PointType> downSizeFilterSurf;
 pcl::VoxelGrid<PointType> downSizeFilterMap;
+pcl::VoxelGrid<PointType> downSizeFilterForObb;
+
+obb_struct obb_data;
 
 ros::Publisher pubMarkerText;
 ros::Publisher pubOverlayText;
@@ -190,6 +187,7 @@ bool if_log_speed_print = true;
 bool if_cropself = true;
 bool if_init_time_sec = false;
 bool if_moving = false;
+bool enable_adaptive_filter_size = true;
 
 bool if_start_idle_1 = false;
 bool if_start_idle_2 = false;
@@ -668,14 +666,13 @@ void map_incremental()
 
 void publish_cloud(const ros::Publisher &pub, PointCloudXYZI::Ptr pcl_in, std::string frame_id)
 {
-    if (pub.getNumSubscribers() >0){
-        sensor_msgs::PointCloud2 ros_pc2_msg;
-        pcl::toROSMsg(*pcl_in, ros_pc2_msg);
-        ros_pc2_msg.header.stamp = ros::Time().fromSec(lidar_end_time);
-        ros_pc2_msg.header.frame_id = frame_id;
-        pub.publish(ros_pc2_msg);
-    }
+    sensor_msgs::PointCloud2 ros_pc2_msg;
+    pcl::toROSMsg(*pcl_in, ros_pc2_msg);
+    ros_pc2_msg.header.stamp = ros::Time().fromSec(lidar_end_time);
+    ros_pc2_msg.header.frame_id = frame_id;
+    pub.publish(ros_pc2_msg);
 }
+
 PointCloudXYZI::Ptr pcl_wait_pub(new PointCloudXYZI(500000, 1));
 PointCloudXYZI::Ptr pcl_wait_save(new PointCloudXYZI());
 
@@ -717,7 +714,7 @@ void updateTimeName(ros::Time ros_time_in)
 
 void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
 {
-    if (scan_pub_en && pubLaserCloudFull.getNumSubscribers()>0)
+    if (scan_pub_en)
     {
         PointCloudXYZI::Ptr laserCloudFullRes(dense_pub_en ? feats_undistort : feats_down_body);
         int size = laserCloudFullRes->points.size();
@@ -779,12 +776,10 @@ void publish_frame_world(const ros::Publisher &pubLaserCloudFull)
 
 void publish_effect_world(const ros::Publisher &pubLaserCloudEffect)
 {
-    if (pubLaserCloudEffect.getNumSubscribers()==0){
-        return;
-    }
     PointCloudXYZI::Ptr laserCloudWorld(
         new PointCloudXYZI(effct_feat_num, 1));
-    for (int i = 0; i < effct_feat_num; i++){
+    for (int i = 0; i < effct_feat_num; i++)
+    {
         RGBpointBodyToWorld(&laserCloudOri->points[i],
                             &laserCloudWorld->points[i]);
     }
@@ -973,7 +968,6 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped, const ros::Publish
 
 void pubJskOverlay(geometry_msgs::PoseStamped pose_in)
 {
-    if(pubOverlayText.getNumSubscribers()==0){return;}
     std::ostringstream tostr;
     if(if_moving){
     // variable for text view facing marker
@@ -1027,7 +1021,6 @@ void pubJskOverlay(geometry_msgs::PoseStamped pose_in)
 
 void pubMarker(geometry_msgs::PoseStamped pose_in)
 {
-    if (pubMarkerText.getNumSubscribers()==0){return;}
     std::ostringstream tostr;
     // variable for text view facing marker
     tostr << "x:" << pose_in.pose.position.x << ", y:" << pose_in.pose.position.y << ", z:" << pose_in.pose.position.z << std::endl;
@@ -1064,7 +1057,6 @@ void pubMarker(geometry_msgs::PoseStamped pose_in)
 
 void publish_path(const ros::Publisher pubPath)
 {
-    if (pubPath.getNumSubscribers()==0){return;}
     set_posestamp(msg_body_pose);
     msg_body_pose.header.stamp = ros::Time().fromSec(lidar_end_time);
     msg_body_pose.header.frame_id = map_frame_name;
@@ -1315,7 +1307,8 @@ int main(int argc, char **argv)
     nh.param<int>("idle_start_l1_sec", idle_start_l1_sec, 10);
     nh.param<int>("idle_start_l2_sec", idle_start_l2_sec, 30);
     nh.param<int>("idle_pub_freq_sec", idle_pub_freq_sec, 10);
-    
+    nh.param<bool>("enable_adaptive_filter_size", enable_adaptive_filter_size, true);
+
     nh.getParam("max_x", max_x);
     nh.getParam("min_x", min_x);
     nh.getParam("max_y", max_y);
@@ -1502,7 +1495,22 @@ int main(int argc, char **argv)
             /*** Segment the map in lidar FOV ***/
             lasermap_fov_segment();
 
+            /***** Adaptive filter size*****/
+            if(enable_adaptive_filter_size){
+               downSizeFilterForObb.setLeafSize(1, 1, 1);
+               downSizeFilterForObb.setInputCloud(feats_undistort);
+               downSizeFilterForObb.filter(*feats_down_body);
+               calulate_obb(feats_down_body,&obb_data);
+
+               if (obb_data.length_x*obb_data.width_y*obb_data.hight_z>10000){
+                   filter_size_surf_min = 0.6;
+               }else{
+                   filter_size_surf_min = 0.3;
+               }
+            }
             /*** downsample the feature points in a scan ***/
+            //std::cout<<obb_data.length_x<<"*"<<obb_data.width_y<<"*"<<obb_data.hight_z<<", "<<filter_size_surf_min<<std::endl;
+            downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min, filter_size_surf_min);
             downSizeFilterSurf.setInputCloud(feats_undistort);
             //downSizeFilterSurf.setInputCloud(pcl_feature_full);
             downSizeFilterSurf.filter(*feats_down_body);
