@@ -966,7 +966,7 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped, const ros::Publish
     // tf::Vector3 out_vel = inverseTransform.getBasis()* twist_vel + inverseTransform.getOrigin().cross(out_rot);
 
     // Temporary use: exit the program when the speed exceeds the threshold
-    if (abs(twist.twist.linear.x) > 8.3|| abs(twist.twist.linear.y) > 8.3)
+    if (abs(twist.twist.linear.x) > 10.0|| abs(twist.twist.linear.y) > 10.0)
     {
         ROS_ERROR("Speed exceeds the threshold, exit the program!");
         exit(0);
@@ -1318,6 +1318,7 @@ int main(int argc, char **argv)
     nh.param<int>("idle_start_l2_sec", idle_start_l2_sec, 30);
     nh.param<int>("idle_pub_freq_sec", idle_pub_freq_sec, 10);
     nh.param<bool>("enable_adaptive_filter_size", enable_adaptive_filter_size, true);
+    nh.param<double>("obb_freq_sec", obb_freq_sec);
 
     nh.getParam("max_x", max_x);
     nh.getParam("min_x", min_x);
@@ -1325,6 +1326,7 @@ int main(int argc, char **argv)
     nh.getParam("min_y", min_y);
     nh.getParam("max_z", max_z);
     nh.getParam("min_z", min_z);
+    
     if(!if_cropself){
        set_nocrop();
     }
