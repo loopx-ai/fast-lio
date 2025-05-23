@@ -153,6 +153,9 @@ pcl::VoxelGrid<PointType> downSizeFilterMap;
 pcl::VoxelGrid<PointType> downSizeFilterForObb;
 
 obb_struct obb_data;
+float obb_freq_sec = 1;
+float time_last_obb_sec = 0;
+float time_curr_obb_sec = 0;
 
 ros::Publisher pubMarkerText;
 ros::Publisher pubOverlayText;
@@ -432,6 +435,7 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg_in)
         if_init_time_sec = true;
         time_last_logtag_sec = time_init_sec;
         time_idle_start_sec = time_init_sec;
+        time_last_obb_sec = time_init_sec;
     }
     time_curr_sec = msg->header.stamp.toSec();
     mtx_buffer.lock();
@@ -1502,7 +1506,9 @@ int main(int argc, char **argv)
             lasermap_fov_segment();
 
             /***** Adaptive filter size*****/
-            if(enable_adaptive_filter_size){
+            if(enable_adaptive_filter_size && 
+               ros::Time().fromSec(lidar_end_time).toSec()-time_last_obb_sec > obb_freq_sec){
+
                downSizeFilterForObb.setLeafSize(1.5, 1.5, 1.5);
                downSizeFilterForObb.setInputCloud(feats_undistort);
                downSizeFilterForObb.filter(*feats_down_body);
@@ -1517,6 +1523,7 @@ int main(int argc, char **argv)
                    filter_size_map_min = 0.3;
                    p_pre->point_filter_num = 2;
                }
+               time_last_obb_sec = ros::Time().fromSec(lidar_end_time).toSec()-time_last_obb_sec;
             }
 
             downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min, filter_size_surf_min);
