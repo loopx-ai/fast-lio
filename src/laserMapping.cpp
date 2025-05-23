@@ -153,9 +153,9 @@ pcl::VoxelGrid<PointType> downSizeFilterMap;
 pcl::VoxelGrid<PointType> downSizeFilterForObb;
 
 obb_struct obb_data;
-float obb_freq_sec = 1;
-float time_last_obb_sec = 0;
-float time_curr_obb_sec = 0;
+double obb_freq_sec = 1;
+double time_last_obb_sec = 0;
+double time_curr_obb_sec = 0;
 
 ros::Publisher pubMarkerText;
 ros::Publisher pubOverlayText;
@@ -1318,7 +1318,7 @@ int main(int argc, char **argv)
     nh.param<int>("idle_start_l2_sec", idle_start_l2_sec, 30);
     nh.param<int>("idle_pub_freq_sec", idle_pub_freq_sec, 10);
     nh.param<bool>("enable_adaptive_filter_size", enable_adaptive_filter_size, true);
-    nh.param<double>("obb_freq_sec", obb_freq_sec);
+    nh.param<double>("obb_freq_sec", obb_freq_sec,3.0);
 
     nh.getParam("max_x", max_x);
     nh.getParam("min_x", min_x);
@@ -1508,9 +1508,10 @@ int main(int argc, char **argv)
             lasermap_fov_segment();
 
             /***** Adaptive filter size*****/
+            //std::cout<< std::setprecision(24)<< ros::Time::now().toSec()<<"-"<< time_last_obb_sec << " = " <<fabs(ros::Time::now().toSec()-time_last_obb_sec)<<std::endl;
             if(enable_adaptive_filter_size && 
-               ros::Time().fromSec(lidar_end_time).toSec()-time_last_obb_sec > obb_freq_sec){
-
+               fabs(ros::Time::now().toSec()-time_last_obb_sec) > obb_freq_sec){
+               time_last_obb_sec = ros::Time::now().toSec();
                downSizeFilterForObb.setLeafSize(1.5, 1.5, 1.5);
                downSizeFilterForObb.setInputCloud(feats_undistort);
                downSizeFilterForObb.filter(*feats_down_body);
@@ -1525,14 +1526,13 @@ int main(int argc, char **argv)
                    filter_size_map_min = 0.3;
                    p_pre->point_filter_num = 2;
                }
-               time_last_obb_sec = ros::Time().fromSec(lidar_end_time).toSec()-time_last_obb_sec;
+               std::cout<<std::setprecision(2)<<obb_data.length_x<<"*"<<obb_data.width_y<<"*"<<obb_data.hight_z<<", "<<filter_size_surf_min<<std::endl;
             }
-
             downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min, filter_size_surf_min);
             downSizeFilterMap.setLeafSize(filter_size_map_min, filter_size_map_min, filter_size_map_min);
 
             /*** downsample the feature points in a scan ***/
-            //std::cout<<obb_data.length_x<<"*"<<obb_data.width_y<<"*"<<obb_data.hight_z<<", "<<filter_size_surf_min<<std::endl;
+
             //downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min, filter_size_surf_min);
             downSizeFilterSurf.setInputCloud(feats_undistort);
             //downSizeFilterSurf.setInputCloud(pcl_feature_full);

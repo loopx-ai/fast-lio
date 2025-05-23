@@ -1,0 +1,118 @@
+core:
+  alert:
+    front:
+      audio: true
+      backup: 1.5
+      level: 1
+      object:
+      - unknow
+      - vehicle
+      - pedestrian
+      range:
+      - 9
+      - 6
+      - 3
+    rear:
+      audio: true
+      level: 2
+      object:
+      - unknow
+      - vehicle
+      - pedestrian
+      range:
+      - 3
+      - 2
+      - 1
+    side:
+      audio: true
+      level: 2
+      range:
+      - 0.2
+      - 0.2
+      - 0.1
+  path:
+    length: 9
+  record:
+    path: ~/rosbag
+    topics:
+    - /sensing/front/livox/points
+    - /sensing/front/imu/imu_data
+    - /sensing/front/camera/image_raw/compressed
+    - /sensing/front/camera/camera_info
+    - /sensing/rear/livox/lidar
+    - /sensing/rear/livox/imu
+    - /sensing/rear/camera/image_raw/compressed
+    - /sensing/rear/camera/camera_info
+    - /sensing/io/can0/recv
+    - /sensing/rgb/camera/image_raw/compressed
+    - /sensing/rgb/camera/camera_info
+machine:
+  dimension:
+    height: 1.9
+    length: 3.6
+    width: 2.1
+  drive: generic
+  manufacturer: generic
+  mirror:
+    max_x: 1.8
+    max_y: 1.05
+    max_z: 2.4
+    min_x: -1.8
+    min_y: -1.05
+    min_z: -1.0
+  model: truck
+  name: generic
+sensorkit:                               
+  front:
+    camera_rtsp_src: rtsp://admin:123456@10.20.30.40:554/cam0_0
+    enable: true
+    ext_base2lidar:
+    - 0.44
+    - -0.49
+    - 2.0 
+    - -1.6705
+    - -1.045
+    - -1.4844
+    ext_lidar2cam:
+    - -0.00571692 
+    - -0.0399181 
+    - -0.142178
+    - 0.0307656 
+    - -0.0282548 
+    - 1.0741821
+    ext_lidar2imu:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    model: hw_v1_0
+  rear:
+    camera_rtsp_src: rtsp://root:root@10.20.30.41:554/cam0_0
+    enable: true
+    ext_base2lidar:
+    - -0.2
+    - 0.0
+    - 1.4
+    - 3.1415926
+    - -0.195
+    - 3.1415926
+    ext_lidar2cam:
+    - -0.0189742
+    - 0.0014956
+    - -0.012955
+    - 1.2320226
+    - 0.0128095
+    - 1.5657301
+    ext_lidar2imu:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    model: hw_v1_0
+system:
+  image: ghcr.io/loopx-ai/clair-alert
+  version: 0.1

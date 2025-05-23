@@ -1,0 +1,122 @@
+core:
+  alert:
+    front:
+      audio: true
+      backup: 1.5
+      level: 0
+      object:
+      - unknow
+      - vehicle
+      - pedestrian
+      range:
+      - 9
+      - 6
+      - 3
+    rear:
+      audio: true
+      level: 2
+      object:
+      - unknow
+      - vehicle
+      - pedestrian
+      range:
+      - 3
+      - 2
+      - 1
+    side:
+      audio: true
+      level: 2
+      range:
+      - 0.2
+      - 0.2
+      - 0.1
+  path:
+    length: 9
+  record:
+    path: ~/rosbag
+    topics:
+    - /sensing/front/livox/lidar
+    - /sensing/front/livox/imu
+    - /sensing/front/camera/image_raw/compressed
+    - /sensing/front/camera/camera_info
+    - /sensing/rear/livox/lidar
+    - /sensing/rear/livox/imu
+    - /sensing/rear/camera/image_raw/compressed
+    - /sensing/rear/camera/camera_info
+    - /sensing/io/can0/recv
+machine:
+  dimension:
+    height: 2.6
+    length: 5.6
+    width: 2.0
+  drive: generic
+  manufacturer: generic
+  front_sensor_id: SH-CEM-008
+  front_cam_id: OPTICOM-IP-008
+  front_lidar_id: MID-360-007
+  rear_sensor_id: SH-CEM-006
+  rear_cam_id: OPTICOM-IP-006
+  rear_lidar_id: MID-360-009
+  mirror:
+    max_x: 2.8
+    max_y: 1.0
+    max_z: 3.1
+    min_x: -2.8
+    min_y: -1.0
+    min_z: -1.0
+  model: truck
+  name: generic
+sensorkit:
+  front:
+    camera_rtsp_src: rtsp://root:root@10.20.30.50/cam0_0
+    enable: true
+    ext_base2lidar:
+    - 0.7
+    - 0.0
+    - 2.15
+    - 3.1415926
+    - -0.063
+    - 0.0
+    ext_lidar2cam:
+    - -0.00289275
+    - 0.0310339
+    - 0.0618286
+    - 1.1798294
+    - -0.0058638
+    - 1.5728122
+    ext_lidar2imu:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    model: hw_v1_0
+  rear:
+    camera_rtsp_src: rtsp://root:root@10.20.30.48:554/cam0_0
+    enable: true
+    ext_base2lidar:
+    - -2.4
+    - 0.0
+    - 2.4
+    - 3.1415926
+    - 0.1267
+    - 3.1415926
+    ext_lidar2cam:
+    - -0.0298944
+    - 0.038427
+    - -0.0549677
+    - 1.1796605
+    - 0.0038934
+    - 1.5824781
+    ext_lidar2imu:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    model: hw_v1_0
+system:
+  image: ghcr.io/loopx-ai/clair-alert
+  version: 0.1

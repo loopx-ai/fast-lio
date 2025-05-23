@@ -1,0 +1,55 @@
+system:
+  image: ghcr.io/loopx-ai/clair-alert
+  version: 0.1
+
+machine:
+  manufacturer: generic   # Caterpillar, Komatsu...
+  model: truck            # Truck, Loader, Dozer, Excavator...
+  name: generic           # R3000H...
+  drive: generic          # ackermann, articulated, differential...
+  dimension:
+    length: 4.2
+    width: 2.0
+    height: 1.6
+  mirror:
+    min_x: -2.1
+    max_x: 2.1
+    min_y: -1.0
+    max_y: 2.0
+    min_z: -1.0
+    max_z: 2.1            # Machine height + {Safe Range}
+
+sensorkit:
+  front:
+    enable: true
+    model: hw_v1_0
+    camera_rtsp_src: rtsp://root:root@10.20.30.40:554/cam0_0
+    ext_base2lidar: [0.2, 0.0, 1.4, 3.1415926, -0.195, 0] # x, y, z, roll, pitch, yaw
+    ext_lidar2imu:  [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # x, y, z, roll, pitch, yaw
+    ext_lidar2cam:  [0.0317734, 0.0884772, -0.14, 1.1594, 0.0671, 1.479] # x, y, z, roll, pitch, yaw
+
+core:
+  alert:
+    front:
+      level: 0
+      range: [8, 6, 3]
+      audio: true
+    rear:
+      level: 2
+      range: [6, 4, 2]
+      audio: true
+    side:
+      level: 0
+      range: [0.6, 0.6, 0.4]
+      audio: true
+  path:
+    length: 8
+  
+  record:
+    path: ~/rosbag
+    topics:
+    - /livox/lidar
+    - /livox/imu
+    - /camera/image_raw/compressed
+    - /camera/camera_info
+
