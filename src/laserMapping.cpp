@@ -1526,7 +1526,7 @@ int main(int argc, char **argv)
                    filter_size_map_min = 0.3;
                    p_pre->point_filter_num = 2;
                }
-               std::cout<<std::setprecision(2)<<obb_data.length_x<<"*"<<obb_data.width_y<<"*"<<obb_data.hight_z<<", "<<filter_size_surf_min<<std::endl;
+               //std::cout<<std::setprecision(2)<<obb_data.length_x<<"*"<<obb_data.width_y<<"*"<<obb_data.hight_z<<", "<<filter_size_surf_min<<std::endl;
             }
             downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min, filter_size_surf_min);
             downSizeFilterMap.setLeafSize(filter_size_map_min, filter_size_map_min, filter_size_map_min);
