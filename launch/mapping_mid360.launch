@@ -63,8 +63,8 @@
     <remap from="max_z"  to="/hardware/machine/self_crop/max_z" />
     <remap from="min_z"  to="/hardware/machine/self_crop/min_z" />
 
-    <remap from="front_lidar_base2lidar" to="/sensorkit/front/ext_base2lidar" />
-    <remap from="rear_lidar_base2lidar"  to="/sensorkit/rear/ext_base2lidar" />
+    <remap from="front_lidar_base2lidar" to="/hardware/sensorkits/front/calibration/base2lidar" />
+    <remap from="rear_lidar_base2lidar"  to="/hardware/sensorkits/rear/calibration/base2lidar" />
   </node>
   <group if="$(arg rviz)">
     <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d $(find fast_lio)/rviz_cfg/loam_livox_.rviz" />
