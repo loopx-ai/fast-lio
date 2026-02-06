@@ -56,12 +56,12 @@
     <remap from="/Odometry"  to="/odom" />
     <remap from="/twist"     to="/twist" />
 
-    <remap from="max_x"  to="/machine/mirror/max_x" />
-    <remap from="min_x"  to="/machine/mirror/min_x" />
-    <remap from="max_y"  to="/machine/mirror/max_y" />
-    <remap from="min_y"  to="/machine/mirror/min_y" />
-    <remap from="max_z"  to="/machine/mirror/max_z" />
-    <remap from="min_z"  to="/machine/mirror/min_z" /> 
+    <remap from="max_x"  to="/hardware/machine/self_crop/max_x" />
+    <remap from="min_x"  to="/hardware/machine/self_crop/min_x" />
+    <remap from="max_y"  to="/hardware/machine/self_crop/max_y" />
+    <remap from="min_y"  to="/hardware/machine/self_crop/min_y" />
+    <remap from="max_z"  to="/hardware/machine/self_crop/max_z" />
+    <remap from="min_z"  to="/hardware/machine/self_crop/min_z" />
 
     <remap from="front_lidar_base2lidar" to="/sensorkit/front/ext_base2lidar" />
     <remap from="rear_lidar_base2lidar"  to="/sensorkit/rear/ext_base2lidar" />
